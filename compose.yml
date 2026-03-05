@@ -5,9 +5,8 @@ services:
       context: ./docker
       dockerfile: Dockerfile
       args:
-        DOCKER_GID: ${DOCKER_GID:-1001}
-        USER_UID: ${UID:-1000}
-        USER_GID: ${GID:-1000}
+        USER_UID: ${USER_UID:?USER_UID is not set. Run via 'make opencode-build'}
+        USER_GID: ${USER_GID:?USER_GID is not set. Run via 'make opencode-build'}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./.opencode/config:/home/opencode/.config/opencode

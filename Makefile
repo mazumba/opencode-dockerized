@@ -1,3 +1,7 @@
+USER_UID ?= $(shell id -u)
+USER_GID ?= $(shell id -g)
+export USER_UID USER_GID
+
 opencode-build:
 	mkdir -p .opencode/config && mkdir -p .opencode/share
 	docker compose build --no-cache
