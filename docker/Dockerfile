@@ -9,6 +9,7 @@ RUN apt-get update && apt-get install -y \
     ca-certificates \
     git \
     make \
+    ripgrep \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Docker CLI only (no daemon)
