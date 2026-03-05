@@ -1,0 +1,5 @@
+services:
+  opencode:
+    volumes:
+#     IMPORTANT: Use the full path to your projects directory to avoid dind volume mounting issues:
+      - /full/path/to/my/projects:/full/path/to/my/projects
