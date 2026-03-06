@@ -1,47 +1,108 @@
 # opencode-dockerized
-Run opencode inside a docker container with the docker cli installed and mounted socket.
+
+Run [opencode](https://opencode.ai) inside a Docker container with the Docker CLI mounted and access to the host Docker socket.
+
+## Prerequisites
+
+Copy the override template and set the **full absolute path** to your projects directory.
+Full paths are required to avoid Docker-in-Docker volume mounting issues:
+
+```sh
+cp compose.override.yml.dist compose.override.yml
+```
+
+Then edit `compose.override.yml` and replace the placeholder path:
+
+```yaml
+services:
+  opencode:
+    volumes:
+      - /full/path/to/my/projects:/full/path/to/my/projects
+```
 
 ## Usage
 
 ```sh
-# Build and run (recommended – DOCKER_GID is detected automatically)
+# Build the image (run once, or after Dockerfile changes)
 make opencode-build
+
+# Start the container
 make opencode-run
+# → http://localhost:4096
 
 # Tear down
 make opencode-down
 ```
 
-## Docker socket access (`DOCKER_GID`)
+The container runs as a non-root user matching your host `UID`/`GID` (detected automatically by the `Makefile`).
 
-The container needs to talk to the host Docker socket (`/var/run/docker.sock`).
-To avoid permission errors the group inside the container must match the GID that
-owns the socket on **your** host:
+## Docker socket access
 
-| Host OS | Typical socket GID |
-|---------|--------------------|
-| macOS (Docker Desktop) | `1` (`daemon`) |
-| Linux (Docker Engine) | `999` or varies |
+The container mounts `/var/run/docker.sock` so opencode can run Docker commands on the host.
+Socket permissions are handled automatically at container startup by `docker/entrypoint.sh`:
+it reads the GID that owns the socket and adds the `opencode` user to that group before
+dropping privileges. No manual configuration is needed.
 
-The `Makefile` detects the correct GID automatically:
+| Host OS                | Typical socket GID |
+|------------------------|--------------------|
+| macOS (Docker Desktop) | `0` (`root`)       |
+| Linux (Docker Engine)  | `999` or varies    |
 
-```makefile
-DOCKER_GID ?= $(shell stat -c '%g' /var/run/docker.sock 2>/dev/null \
-                    || stat -f '%g' /var/run/docker.sock 2>/dev/null \
-                    || echo 1)
-export DOCKER_GID
-```
+## Authentication (`auth.json`)
 
-If you build or run **without** the Makefile, export the variable yourself first:
+If you already have opencode installed locally and are authenticated, you can copy your
+existing credentials into the share directory to avoid re-authenticating inside the container:
 
 ```sh
-# macOS
-export DOCKER_GID=$(stat -f '%g' /var/run/docker.sock)
-
-# Linux
-export DOCKER_GID=$(stat -c '%g' /var/run/docker.sock)
-
-docker compose build --no-cache
-docker compose up -d
+# macOS / Linux
+cp ~/.local/share/opencode/auth.json .opencode/share/auth.json
 ```
 
+Otherwise, start the container with `make opencode-run`, open `http://localhost:4096`, and
+authenticate through the UI. The credentials will be written to `.opencode/share/auth.json`
+automatically.
+
+> **Note:** `auth.json` may contain provider tokens. It is covered by `.gitignore` and will
+> not be committed to version control.
+
+## Configuration (`opencode.json`)
+
+The container maps `.opencode/config/` to the opencode config directory inside the container.
+Create or edit `.opencode/config/opencode.json` to customise behaviour:
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "autoupdate": true,
+  "share": "disabled",
+  "enabled_providers": ["github-copilot"],
+  "permission": {
+    "bash": "ask",
+    "*": "allow"
+  }
+}
+```
+
+This file is gitignored so it is safe to customise locally without affecting others.
+
+### Permissions
+
+The `permission` field controls which tool calls require your approval before execution.
+The example above asks for confirmation on every `bash` command while allowing everything else.
+
+To require approval for more tools, add them explicitly:
+
+```json
+{
+  "permission": {
+    "bash": "ask",
+    "edit": "ask",
+    "write": "ask",
+    "*": "allow"
+  }
+}
+```
+
+See the [permissions docs](https://opencode.ai/docs/permissions) for all available options.
+
+Happy agentic coding!

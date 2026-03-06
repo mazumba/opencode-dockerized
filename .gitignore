@@ -1,3 +1,6 @@
-.opencode/
+.opencode/config/*
+!.opencode/config/.gitkeep
+.opencode/share/*
+!.opencode/share/.gitkeep
 
 compose.override.yml
