@@ -33,7 +33,7 @@ RUN curl -fsSL https://opencode.ai/install | bash \
     && mkdir -p /home/opencode/.local/share/opencode \
     && mkdir -p /home/opencode/.config/opencode
 
-# Switch back to root so the entrypoint can chmod the socket before dropping privileges
+# Switch back to root so the entrypoint can adjust group membership before dropping privileges
 USER root
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
