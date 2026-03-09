@@ -1,6 +1,6 @@
 # opencode-dockerized
 
-Run [opencode](https://opencode.ai) inside a Docker container with the Docker CLI mounted and access to the host Docker socket.
+Run [opencode](https://opencode.ai) inside a Docker container - a practical alternative to installing it locally, useful if you prefer not to install Node or opencode globally on your machine.
 
 ## Prerequisites
 
@@ -42,6 +42,9 @@ The container mounts `/var/run/docker.sock` so opencode can run Docker commands 
 Socket permissions are handled automatically at container startup by `docker/entrypoint.sh`:
 it reads the GID that owns the socket and adds the `opencode` user to that group before
 dropping privileges. No manual configuration is needed.
+
+Note that mounting the Docker socket gives the container full access to the host Docker daemon,
+so this setup does not provide meaningful isolation from the host.
 
 | Host OS                | Typical socket GID |
 |------------------------|--------------------|
