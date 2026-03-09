@@ -1,6 +1,6 @@
 # opencode-dockerized
 
-Run [opencode](https://opencode.ai) inside a Docker container - a practical alternative to installing it locally, useful if you prefer not to install Node or opencode globally on your machine.
+Run [opencode](https://opencode.ai) inside a Docker container - a practical alternative to installing it locally, useful if you prefer to keep your local machine clean.
 
 ## Prerequisites
 
