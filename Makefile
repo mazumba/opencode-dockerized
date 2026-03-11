@@ -5,14 +5,14 @@ export USER_UID USER_GID
 opencode-build:
 	docker compose build --no-cache
 
-opencode-run: ## run opencode container
-	docker compose up -d --wait --remove-orphans opencode
+opencode-down:
+	docker compose down --remove-orphans
+
+opencode-run: opencode-down ## run opencode container
+	docker compose up -d --wait opencode
 	@echo '                                    ▄     '
 	@echo '   █▀▀█ █▀▀█ █▀▀█ █▀▀▄ █▀▀▀ █▀▀█ █▀▀█ █▀▀█'
 	@echo '   █  █ █  █ █▀▀▀ █  █ █    █  █ █  █ █▀▀▀'
 	@echo '   ▀▀▀▀ █▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀'
 	@echo '                                          '
 	@echo '   Local access:     http://localhost:4096'
-
-opencode-down:
-	docker compose down --remove-orphans
