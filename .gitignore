@@ -1,5 +1,6 @@
 .opencode/config/*
 !.opencode/config/.gitkeep
+!.opencode/config/commands
 .opencode/share/*
 !.opencode/share/.gitkeep
 
