@@ -2,6 +2,7 @@
 description: "RPI phase 2 — turn a research doc into a numbered implementation plan"
 subtask: true
 agent: build
+model: github-copilot/claude-sonnet-4.6
 ---
 You are in the **Plan** phase of the Research-Plan-Implement workflow.
 

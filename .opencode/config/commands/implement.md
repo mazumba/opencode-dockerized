@@ -2,6 +2,7 @@
 description: "RPI phase 3 — execute a plan step by step and run the quality gate"
 subtask: true
 agent: build
+model: github-copilot/claude-sonnet-4.6
 ---
 You are in the **Implement** phase of the Research-Plan-Implement workflow.
 

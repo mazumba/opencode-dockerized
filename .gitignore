@@ -5,3 +5,5 @@
 !.opencode/share/.gitkeep
 
 compose.override.yml
+
+.idea

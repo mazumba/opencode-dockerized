@@ -1,8 +1,8 @@
 ---
-description: "RPI phase 1 — research the codebase for a task and write a research doc"
+description: "RPI phase 1 — deep research using Claude Opus"
 subtask: true
 agent: build
-model: github-copilot/claude-sonnet-4.6
+model: github-copilot/claude-opus-4.6
 ---
 You are in the **Research** phase of the Research-Plan-Implement workflow.
 
