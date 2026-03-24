@@ -1,7 +1,7 @@
 ---
 description: "RPI phase 1 — research the codebase for a task and write a research doc"
 subtask: true
-agent: plan
+agent: build
 ---
 You are in the **Research** phase of the Research-Plan-Implement workflow.
 

@@ -1,7 +1,7 @@
 ---
 description: "RPI phase 2 — turn a research doc into a numbered implementation plan"
 subtask: true
-agent: plan
+agent: build
 ---
 You are in the **Plan** phase of the Research-Plan-Implement workflow.
 

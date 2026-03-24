@@ -1,5 +1,6 @@
 ---
 description: "RPI phase 3 — execute a plan step by step and run the quality gate"
+subtask: true
 agent: build
 ---
 You are in the **Implement** phase of the Research-Plan-Implement workflow.
