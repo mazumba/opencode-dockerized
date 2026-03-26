@@ -10,6 +10,11 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./.opencode/config:/home/opencode/.config/opencode
-      - ./.opencode/share:/home/opencode/.local/share/opencode
+      - opencode_share:/home/opencode/.local/share/opencode
+    environment:
+      OPENCODE_DISABLE_AUTOUPDATE: true
     ports:
       - "4096:4096"
+
+volumes:
+  opencode_share:

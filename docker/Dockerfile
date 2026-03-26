@@ -26,14 +26,12 @@ RUN if ! getent group ${USER_GID} > /dev/null 2>&1; then \
     fi \
     && useradd -m -u ${USER_UID} -g ${USER_GID} -s /bin/bash opencode
 
-# Install opencode as the opencode user
 USER opencode
-RUN curl -fsSL https://opencode.ai/install | bash \
+RUN curl -fsSL https://opencode.ai/install | bash -s -- --version 1.3.3 \
     && mkdir -p /home/opencode/.local/state/opencode \
     && mkdir -p /home/opencode/.local/share/opencode \
     && mkdir -p /home/opencode/.config/opencode
 
-# Switch back to root so the entrypoint can adjust group membership before dropping privileges
 USER root
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh

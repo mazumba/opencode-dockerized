@@ -3,3 +3,5 @@ services:
     volumes:
 #     IMPORTANT: Use the full path to your projects directory to avoid dind volume mounting issues:
       - /full/path/to/my/projects:/full/path/to/my/projects
+#     Mount your auth.json file here, if you have one:
+      - ./.opencode/share/auth.json:/home/opencode/.local/share/opencode/auth.json
