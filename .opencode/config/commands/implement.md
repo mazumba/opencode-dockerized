@@ -2,7 +2,6 @@
 description: "RPI phase 3 — execute a plan step by step and run the quality gate"
 subtask: true
 agent: build
-model: github-copilot/claude-sonnet-4.6
 ---
 
 Execute the implementation plan in `$ARGUMENTS` step by step and run the quality gate when done.

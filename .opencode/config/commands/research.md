@@ -2,7 +2,6 @@
 description: "RPI phase 1 — research the codebase for a task and write a research doc"
 subtask: true
 agent: build
-model: github-copilot/claude-haiku-4.5
 ---
 
 Research the codebase for the following task and write a structured research document: `$ARGUMENTS`

@@ -1,8 +1,7 @@
 ---
 description: Scaffold a new skill folder with SKILL.md, GOTCHAS.md, HISTORY.md, and starter directories
-agent: build
 subtask: true
-model: github-copilot/claude-sonnet-4.6
+agent: build
 ---
 
 Create a new OpenCode skill. Skill name: `$1`. Description hint: `$ARGUMENTS` (everything after the name).

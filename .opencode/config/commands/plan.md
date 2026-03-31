@@ -2,7 +2,6 @@
 description: "RPI phase 2 — turn a research doc into a numbered implementation plan"
 subtask: true
 agent: build
-model: github-copilot/claude-sonnet-4.6
 ---
 
 Turn the research document in `$ARGUMENTS` into a concrete, step-by-step implementation plan.

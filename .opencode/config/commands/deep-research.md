@@ -1,8 +1,7 @@
 ---
 description: "RPI phase 1 — deep research using Claude Opus"
 subtask: true
-agent: build
-model: github-copilot/claude-opus-4.6
+agent: deep-research-agent
 ---
 
 Research the codebase for the following task and write a structured research document: `$ARGUMENTS`
