@@ -109,3 +109,54 @@ To require approval for more tools, add them explicitly:
 See the [permissions docs](https://opencode.ai/docs/permissions) for all available options.
 
 Happy agentic coding!
+
+## Custom commands & skills
+
+This repo ships a set of slash commands in `.opencode/config/commands/` and a skill system in `.opencode/skills/`.
+
+### Slash commands
+
+| Command | Purpose |
+|---|---|
+| `/research <task>` | RPI phase 1 — explores the codebase and writes a research doc to `docs/thoughts/` |
+| `/deep-research <task>` | Same as `/research` but uses Claude Opus for harder problems |
+| `/plan <artifact-folder>` | RPI phase 2 — turns a research doc into a numbered implementation plan |
+| `/implement <artifact-folder>` | RPI phase 3 — executes the plan step by step and runs the quality gate |
+| `/skill <name> [description hint]` | Scaffolds a new skill folder (see below) |
+
+The Research → Plan → Implement workflow keeps each phase focused: research never touches code, plan never touches code, implement follows the plan exactly.
+
+### Skills
+
+Skills are domain-knowledge folders that the model loads on demand. Each lives under `.opencode/skills/<name>/` and contains:
+
+| File / Dir | Purpose |
+|---|---|
+| `SKILL.md` | Reference facts, file map, config and memory guidance |
+| `GOTCHAS.md` | Accumulated failure points and fixes — never deleted |
+| `HISTORY.md` | Append-only change log — one entry per session that modified the domain |
+| `assets/` | Templates, static files, and output scaffolds |
+| `scripts/` | Helper scripts and libraries the agent can run or compose |
+
+#### Creating a skill
+
+```sh
+/skill <name> <short description hint>
+```
+
+Example:
+
+```sh
+/skill billing-lib Internal billing library — edge cases, footguns, charge flow
+```
+
+This scaffolds all five files/directories with the correct templates pre-filled. After creation:
+
+1. Fill in `SKILL.md` → `## Key Facts` with what the model needs to *know* (not do): file paths, data shapes, naming rules, API shapes.
+2. Add any reusable scripts to `scripts/` and reference them in `## File & Directory Map`.
+3. Add output templates or static assets to `assets/`.
+4. If the skill needs per-user config (e.g. a Slack channel), keep the `## Configuration` section and define the shape of `config.json`.
+5. If the skill benefits from remembering past runs, keep the `## Memory` section and choose a log file format.
+6. Remove the `## Configuration` and `## Memory` sections if the skill needs neither.
+
+Gotchas and history accumulate automatically as the agent works — you should not need to edit those files manually.
