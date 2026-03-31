@@ -4,48 +4,37 @@ subtask: true
 agent: build
 model: github-copilot/claude-sonnet-4.6
 ---
-You are in the **Implement** phase of the Research-Plan-Implement workflow.
 
-## Artifact folder
+Execute the implementation plan in `$ARGUMENTS` step by step and run the quality gate when done.
 
-$ARGUMENTS
+## What to do
 
 Read `$ARGUMENTS/plan.md` in full before doing anything else.
-If a `$ARGUMENTS/progress.md` file exists, read it too — it means a previous session started this task.
+If `$ARGUMENTS/progress.md` exists, read it too — it means a previous session started this task.
 
-## Instructions
+Load all skills listed in the plan's "Skills to Update" section before writing any code.
 
-1. Load all skills referenced in the plan's "Skills to Update" section before writing any code.
+Execute each step from the plan in order. For each step:
 
-2. Execute each step from the plan **in order**. For each step:
-   a. Announce which step you are starting.
-   b. Make the changes specified.
-   c. Run the verification command listed in the step, if any.
-   d. Mark the step complete in `$ARGUMENTS/progress.md` (see format below).
-   e. If verification fails, fix the issue before moving to the next step.
+- Announce which step you are starting.
+- Make the changes specified.
+- Run the verification command listed in the step, if any.
+- Mark the step complete in `$ARGUMENTS/progress.md` (see format below).
+- If verification fails, fix the issue before moving to the next step.
 
-3. After ALL steps are complete, run the full quality gate:
-   ```
-   make dev-init && make rector-fix && make phpcs-fix && make phpstan && make phpunit
-   ```
-   Fix any failures before declaring the task done.
+After all steps are complete, run the full quality gate:
 
-4. If the plan requires a database migration (noted in a step), run:
-   ```
-   make create-migration
-   ```
-   Review the generated migration file, then include it in the quality gate run.
+```
+make dev-init && make rector-fix && make phpcs-fix && make phpstan && make phpunit
+```
 
-5. After the quality gate passes, update any skill files listed in the plan's "Skills to Update"
-   section to reflect the implementation changes. Skills are the long-term source of truth —
-   stale skills mislead future sessions.
+Fix any failures before declaring the task done.
 
-6. Never create git commits. The user commits manually.
+If the plan requires a database migration, run `make create-migration`, review the generated file, then include it in the quality gate run.
 
-## Progress file format
+After the quality gate passes, update any skill files listed in the plan's "Skills to Update" section to reflect the implementation changes.
 
-Maintain `$ARGUMENTS/progress.md` throughout implementation so the task can be resumed if the
-session is interrupted:
+Maintain `$ARGUMENTS/progress.md` throughout so the task can be resumed if the session is interrupted:
 
 ```
 # Progress: <task description>
@@ -70,3 +59,13 @@ In progress / Complete
 ```
 
 Update `Status: Complete` and remove the "Current Step" block when all steps and the quality gate pass.
+
+## Rules you must follow
+
+- **Never hand-write migration files.** Always use `make create-migration`.
+- **Never create git commits.**
+- **Quality gate must pass** before the task is declared done.
+- **Update skills after implementation.** Stale skills mislead future sessions.
+- **Follow the plan step order.** Do not skip or reorder steps without noting it in Issues.
+
+After completing all steps and the quality gate, confirm which steps were completed and whether any skills were updated.

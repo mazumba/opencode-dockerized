@@ -4,29 +4,19 @@ subtask: true
 agent: build
 model: github-copilot/claude-sonnet-4.6
 ---
-You are in the **Plan** phase of the Research-Plan-Implement workflow.
 
-Your only output is a structured implementation plan. You must not make any code changes.
+Turn the research document in `$ARGUMENTS` into a concrete, step-by-step implementation plan.
 
-## Artifact folder
-
-$ARGUMENTS
+## What to do
 
 Read `$ARGUMENTS/research.md` in full before doing anything else.
 Write your output to `$ARGUMENTS/plan.md`.
 
-## Instructions
+If the research document contains Open Questions that are not yet answered, state that planning cannot proceed and list what needs to be resolved first.
 
-1. Read the research document thoroughly. If it contains Open Questions that are not yet answered,
-   state that planning cannot proceed and list what needs to be resolved first.
+Also read `AGENTS.md` (Rules and Quality Gates sections) to ensure the plan respects all project constraints. Load relevant skills from `.opencode/skills/` for any domain touched by the task.
 
-2. Also read `AGENTS.md` (Rules section and Quality Gates) to ensure the plan respects all project constraints:
-   - Never hand-write migration files — always use `make create-migration`
-   - Never create git commits
-   - Quality gate must pass after every change: `make dev-init && make rector-fix && make phpcs-fix && make phpstan && make phpunit`
-   - Load relevant skills from `.opencode/skills/` for any domain touched
-
-3. Write `plan.md` using this structure (target ~150-200 lines):
+Write `plan.md` using this structure (target ~150–200 lines):
 
 ```
 # Plan: <task description>
@@ -59,12 +49,16 @@ Note any steps that require `make create-migration` before running the gate.
 <how to undo the changes if something goes wrong>
 ```
 
-4. Requirements for each step:
-   - Reference exact file paths (not directories)
-   - Be specific enough that the implementer does not need to make architectural decisions
-   - Include a verification command or assertion so progress is checkable
-   - Flag any step that touches DB schema (needs migration) or assets (needs `make dev-init`)
+## Rules you must follow
 
-5. End your response with:
-   > Plan written to: `$ARGUMENTS/plan.md`
-   > Review it and run `/implement $ARGUMENTS` when ready.
+- **No code changes.** Your only output is the plan document.
+- **Unresolved Open Questions block planning.** List them and stop — do not guess.
+- **Read AGENTS.md** before writing any steps.
+- **Load relevant skills** for every domain the plan touches.
+- **Reference exact file paths** in every step — not directories.
+- **Every step needs a Verify command** so progress is checkable.
+- **Flag schema and asset steps** — any step touching DB schema needs `make create-migration`; any step touching assets needs `make dev-init`.
+- **Never hand-write migration files.** Always use `make create-migration`.
+- **Never create git commits.**
+
+After writing the document, confirm the path and suggest running `/implement $ARGUMENTS` when ready.

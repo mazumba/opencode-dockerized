@@ -4,37 +4,29 @@ subtask: true
 agent: build
 model: github-copilot/claude-opus-4.6
 ---
-You are in the **Research** phase of the Research-Plan-Implement workflow.
 
-Your only output is a structured research document. You must not make any code changes.
+Research the codebase for the following task and write a structured research document: `$ARGUMENTS`
 
-## Task
+## What to do
 
-$ARGUMENTS
+Derive a short slug from the task description (lowercase, hyphens, max 40 chars).
+Determine today's date using the shell: `date +%Y-%m-%d`
+The artifact folder is: `docs/thoughts/<YYYY-MM-DD>_<slug>/`
+Create that folder and write your output to `docs/thoughts/<YYYY-MM-DD>_<slug>/research.md`.
 
-## Instructions
+Before searching the codebase, read `AGENTS.md` in full (Architecture, Rules, and Session Learnings sections), load any relevant skills from `.opencode/skills/` that relate to the task, and check `docs/` for any tooling workarounds related to the task.
 
-1. Derive a short slug from the task description (lowercase, hyphens, max 40 chars).
-   Determine today's date using the shell: `date +%Y-%m-%d`
-   The artifact folder is: `docs/thoughts/<YYYY-MM-DD>_<slug>/`
-   Create that folder and write your output to `docs/thoughts/<YYYY-MM-DD>_<slug>/research.md`.
+Use the `explore` subagent for all file discovery and code reading tasks to keep this context clean. Invoke it with focused, specific questions and collect only the compacted summaries it returns.
 
-2. Before searching the codebase:
-   - Read `AGENTS.md` in full — pay special attention to Architecture, Rules, and Session Learnings.
-   - Load any relevant skills from `.opencode/skills/` that relate to the task.
-   - Check `docs/` for any tooling workarounds related to the task.
+Investigate and record:
 
-3. Use the `explore` subagent for all file discovery and code reading tasks to keep this context clean.
-   Invoke it with focused, specific questions and collect only the compacted summaries it returns.
+- Relevant files and their responsibilities
+- Information flow (which code calls which, in what order)
+- Existing patterns the implementation must follow (entity conventions, form patterns, controller style, etc.)
+- Constraints and gotchas from Session Learnings or skill files that apply
+- Quality gate implications (migrations needed? new deps? fixture changes?)
 
-4. Investigate the following and record findings:
-   - Relevant files and their responsibilities
-   - Information flow (which code calls which, in what order)
-   - Existing patterns the implementation must follow (entity conventions, form patterns, controller style, etc.)
-   - Constraints and gotchas from Session Learnings or skill files that apply
-   - Quality gate implications (migrations needed? new deps? fixture changes?)
-
-5. Write `research.md` using this structure (target ~150-200 lines):
+Write `research.md` using this structure (target ~150–200 lines):
 
 ```
 # Research: <task description>
@@ -58,6 +50,12 @@ $ARGUMENTS
 <any ambiguities that need human input before planning>
 ```
 
-6. End your response with:
-   > Research document written to: `docs/thoughts/<YYYY-MM-DD>_<slug>/research.md`
-   > Review it and run `/plan docs/thoughts/<YYYY-MM-DD>_<slug>` when ready.
+## Rules you must follow
+
+- **No code changes.** Your only output is the research document.
+- **Use the explore subagent** for all codebase reading — never read files directly in this context.
+- **Read AGENTS.md first** before touching the codebase.
+- **Load relevant skills** before forming any conclusions about patterns or conventions.
+- **Open Questions must be honest.** If anything is ambiguous, list it — do not guess.
+
+After writing the document, confirm the path and suggest running `/plan docs/thoughts/<YYYY-MM-DD>_<slug>` when ready.
