@@ -33,7 +33,7 @@ description: <concise trigger-first description, ≤150 chars, starts with "Use 
 | `GOTCHAS.md` | Known failure points and fixes |
 | `HISTORY.md` | Append-only change log |
 | `assets/` | Templates, static files, and output scaffolds (if any) |
-| `scripts/` | Helper scripts and libraries Claude can run or compose (if any) |
+| `scripts/` | Helper scripts and libraries the agent can run or compose (if any) |
 
 ## Key Facts
 
@@ -108,7 +108,7 @@ Empty file. The `assets/` directory is for templates, output scaffolds, and stat
 
 ### 5. `.opencode/skills/$1/scripts/.gitkeep`
 
-Empty file. The `scripts/` directory is for helper scripts and libraries Claude can run or compose during skill execution.
+Empty file. The `scripts/` directory is for helper scripts and libraries the agent can run or compose during skill execution.
 
 ## Rules you must follow
 
