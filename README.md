@@ -116,19 +116,19 @@ This repo ships a set of slash commands in `.opencode/config/commands/` and a sk
 
 ### Slash commands
 
-| Command | Purpose |
-|---|---|
-| `/research <task>` | RPI phase 1 — explores the codebase and writes a research doc to `docs/thoughts/` |
-| `/deep-research <task>` | Same as `/research` but uses Claude Opus for harder problems |
-| `/plan <artifact-folder>` | RPI phase 2 — turns a research doc into a numbered implementation plan |
-| `/implement <artifact-folder>` | RPI phase 3 — executes the plan step by step and runs the quality gate |
-| `/skill <name> [description hint]` | Scaffolds a new skill folder (see below) |
+| Command                                 | Purpose |
+|-----------------------------------------|---|
+| `/research <task>`                      | RPI phase 1 — explores the codebase and writes a research doc to `docs/thoughts/` |
+| `/deep-research <task>`                 | Same as `/research` but uses Claude Opus for harder problems |
+| `/plan <artifact-folder>`               | RPI phase 2 — turns a research doc into a numbered implementation plan |
+| `/implement <artifact-folder>`          | RPI phase 3 — executes the plan step by step and runs the quality gate |
+| `/skill <skill-name> "<description hint>"` | Scaffolds a new skill folder (see below) |
 
 The Research → Plan → Implement workflow keeps each phase focused: research never touches code, plan never touches code, implement follows the plan exactly.
 
 ### Skills
 
-Skills are domain-knowledge folders that the model loads on demand. Each lives under `.opencode/skills/<name>/` and contains:
+Skills are domain-knowledge folders that the model loads on demand. Each lives under `.opencode/skills/<skill-name>/` and contains:
 
 | File / Dir | Purpose |
 |---|---|
@@ -141,13 +141,13 @@ Skills are domain-knowledge folders that the model loads on demand. Each lives u
 #### Creating a skill
 
 ```sh
-/skill <name> <short description hint>
+/skill <skill-name> "<short description hint>"
 ```
 
 Example:
 
 ```sh
-/skill billing-lib Internal billing library — edge cases, footguns, charge flow
+/skill billing-lib "Internal billing library — edge cases, footguns, charge flow"
 ```
 
 This scaffolds all five files/directories with the correct templates pre-filled. After creation:

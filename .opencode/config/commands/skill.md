@@ -4,7 +4,7 @@ subtask: true
 agent: build
 ---
 
-Create a new OpenCode skill. Skill name: `$1`. Description hint: `$ARGUMENTS` (everything after the name).
+Create a new OpenCode skill. Skill name: `$1`. Description hint: `$2`.
 
 ## What to build
 
