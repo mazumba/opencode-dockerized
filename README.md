@@ -110,9 +110,11 @@ See the [permissions docs](https://opencode.ai/docs/permissions) for all availab
 
 Happy agentic coding!
 
-## Custom commands & skills
+## Custom commands & skills & tools
 
 This repo ships a set of slash commands in `.opencode/config/commands/` and a skill system in `.opencode/skills/`.
+
+It also includes a custom PDF extraction tool at `.opencode/tools/pdftotext.ts` so agents can run `pdftotext` directly and return extracted text without manual conversion.
 
 ### Slash commands
 
@@ -125,6 +127,24 @@ This repo ships a set of slash commands in `.opencode/config/commands/` and a sk
 | `/skill <skill-name> "<description hint>"` | Scaffolds a new skill folder (see below) |
 
 The Research → Plan → Implement workflow keeps each phase focused: research never touches code, plan never touches code, implement follows the plan exactly.
+
+### Custom tools
+
+The custom tool file `.opencode/tools/pdftotext.ts` exposes a `pdftotext` tool (same name as the filename) with these arguments:
+
+- `filePath` (required): PDF path, absolute or relative to the agent's current directory
+- `firstPage` / `lastPage` (optional): 1-based page range
+- `preserveLayout` (optional): uses `pdftotext -layout`
+- `rawOrder` (optional): uses `pdftotext -raw`
+- `maxChars` (optional): maximum characters returned (default `40000`)
+
+This tool returns extracted text directly and truncates oversized output with a clear notice.
+
+Example prompt:
+
+```text
+Read from docs/some-pdf-file.pdf, pages 2-4, preserving layout.
+```
 
 ### Skills
 
