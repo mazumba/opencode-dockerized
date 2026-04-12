@@ -9,6 +9,7 @@ RUN apt-get update && apt-get install -y \
     git \
     gosu \
     make \
+    python3 \
     poppler-utils \
     ripgrep \
     && rm -rf /var/lib/apt/lists/*
