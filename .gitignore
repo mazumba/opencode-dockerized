@@ -1,7 +1,9 @@
 .opencode/config/*
-!.opencode/config/.gitkeep
-!.opencode/config/commands
 !.opencode/config/agents
+!.opencode/config/commands
+!.opencode/config/skills
+!.opencode/config/tools
+
 .opencode/share/*
 !.opencode/share/.gitkeep
 

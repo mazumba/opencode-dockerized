@@ -110,73 +110,15 @@ See the [permissions docs](https://opencode.ai/docs/permissions) for all availab
 
 Happy agentic coding!
 
-## Custom commands & skills & tools
+## Custom commands, skills, and tools
 
-This repo ships a set of slash commands in `.opencode/config/commands/` and a skill system in `.opencode/skills/`.
+This repo includes custom slash commands, a reusable skill system, and a PDF extraction tool.
 
-It also includes a custom PDF extraction tool at `.opencode/tools/pdftotext.ts` so agents can run `pdftotext` directly and return extracted text without manual conversion.
+See [OpenCode commands, skills, and tools](docs/opencode-commands-skills-tools.md) for the full command catalog and skill/tool reference.
 
-### Slash commands
-
-| Command                                 | Purpose |
-|-----------------------------------------|---|
-| `/research <task>`                      | RPI phase 1 — explores the codebase and writes a research doc to `docs/thoughts/` |
-| `/deep-research <task>`                 | Same as `/research` but uses Claude Opus for harder problems |
-| `/plan <artifact-folder>`               | RPI phase 2 — turns a research doc into a numbered implementation plan |
-| `/implement <artifact-folder>`          | RPI phase 3 — executes the plan step by step and runs the quality gate |
-| `/skill <skill-name> "<description hint>"` | Scaffolds a new skill folder (see below) |
-
-The Research → Plan → Implement workflow keeps each phase focused: research never touches code, plan never touches code, implement follows the plan exactly.
-
-### Custom tools
-
-The custom tool file `.opencode/tools/pdftotext.ts` exposes a `pdftotext` tool (same name as the filename) with these arguments:
-
-- `filePath` (required): PDF path, absolute or relative to the agent's current directory
-- `firstPage` / `lastPage` (optional): 1-based page range
-- `preserveLayout` (optional): uses `pdftotext -layout`
-- `rawOrder` (optional): uses `pdftotext -raw`
-- `maxChars` (optional): maximum characters returned (default `40000`)
-
-This tool returns extracted text directly and truncates oversized output with a clear notice.
-
-Example prompt:
-
-```text
-Read from docs/some-pdf-file.pdf, pages 2-4, preserving layout.
-```
-
-### Skills
-
-Skills are domain-knowledge folders that the model loads on demand. Each lives under `.opencode/skills/<skill-name>/` and contains:
-
-| File / Dir | Purpose |
-|---|---|
-| `SKILL.md` | Reference facts, file map, config and memory guidance |
-| `GOTCHAS.md` | Accumulated failure points and fixes — never deleted |
-| `HISTORY.md` | Append-only change log — one entry per session that modified the domain |
-| `assets/` | Templates, static files, and output scaffolds |
-| `scripts/` | Helper scripts and libraries the agent can run or compose |
-
-#### Creating a skill
+If you only need the defensive baseline in a project, run:
 
 ```sh
-/skill <skill-name> "<short description hint>"
+/security-profile init
+/security-profile refresh
 ```
-
-Example:
-
-```sh
-/skill billing-lib "Internal billing library — edge cases, footguns, charge flow"
-```
-
-This scaffolds all five files/directories with the correct templates pre-filled. After creation:
-
-1. Fill in `SKILL.md` → `## Key Facts` with what the model needs to *know* (not do): file paths, data shapes, naming rules, API shapes.
-2. Add any reusable scripts to `scripts/` and reference them in `## File & Directory Map`.
-3. Add output templates or static assets to `assets/`.
-4. If the skill needs per-user config (e.g. a Slack channel), keep the `## Configuration` section and define the shape of `config.json`.
-5. If the skill benefits from remembering past runs, keep the `## Memory` section and choose a log file format.
-6. Remove the `## Configuration` and `## Memory` sections if the skill needs neither.
-
-Gotchas and history accumulate automatically as the agent works — you should not need to edit those files manually.

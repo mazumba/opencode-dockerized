@@ -1,0 +1,83 @@
+# OpenCode Commands, Skills, and Tools
+
+This page documents repository-specific slash commands, the skill layout, and custom tools shipped in this repo.
+
+## Slash commands
+
+| Command | Purpose |
+|---|---|
+| `/research <task>` | RPI phase 1 - explores the codebase and writes a research doc to `docs/thoughts/` |
+| `/deep-research <task>` | Same as `/research` but uses Claude Opus for harder problems |
+| `/plan <artifact-folder>` | RPI phase 2 - turns a research doc into a numbered implementation plan |
+| `/implement <artifact-folder>` | RPI phase 3 - executes the plan step by step and runs the quality gate |
+| `/skill <skill-name> "<description hint>"` | Scaffolds a new skill folder |
+| `/security-profile [init\|refresh] [project-name]` | Creates or refreshes a project-specific defensive `security-profile` skill from `security-core` |
+
+The RPI workflow is `research -> plan -> implement`:
+
+- `research` reads and maps the codebase only
+- `plan` converts findings into a step-by-step plan only
+- `implement` executes the plan and runs verification gates
+
+## Per-project security profile
+
+For each project, run both commands so the repository gets and then maintains its security profile:
+
+```sh
+/security-profile init
+/security-profile refresh
+```
+
+- `init` scaffolds `.opencode/skills/security-profile/` with `SKILL.md`, `GOTCHAS.md`, `HISTORY.md`, and `config.json`.
+- `refresh` updates inferred metadata while preserving user-owned settings where possible.
+
+The profile is defensive-only and intended to complement `.opencode/skills/security-core/`.
+
+## Skills
+
+Skills are domain-knowledge folders loaded on demand. Each skill lives under `.opencode/skills/<skill-name>/` and uses this structure:
+
+| File / Dir | Purpose |
+|---|---|
+| `SKILL.md` | Reference facts, file map, config and memory guidance |
+| `GOTCHAS.md` | Accumulated failure points and fixes - never deleted |
+| `HISTORY.md` | Append-only change log - one entry per session that modified the domain |
+| `assets/` | Templates, static files, and output scaffolds |
+| `scripts/` | Helper scripts and libraries the agent can run or compose |
+
+### Creating a skill
+
+```sh
+/skill <skill-name> "<short description hint>"
+```
+
+Example:
+
+```sh
+/skill billing-lib "Internal billing library - edge cases, footguns, charge flow"
+```
+
+After creation:
+
+1. Fill in `SKILL.md` -> `## Key Facts` with what the model needs to know (not do): file paths, data shapes, naming rules, API shapes.
+2. Add reusable scripts to `scripts/` and reference them in `## File & Directory Map`.
+3. Add output templates or static assets to `assets/`.
+4. If the skill needs per-user config, keep `## Configuration` and define `config.json` shape.
+5. If the skill benefits from memory, keep `## Memory` and choose a persistent log format.
+6. Remove `## Configuration` and `## Memory` if not needed.
+
+## Custom tools
+
+The custom tool `.opencode/tools/pdftotext.ts` exposes `pdftotext` with these arguments:
+
+- `filePath` (required): PDF path, absolute or relative to the current directory
+- `firstPage` / `lastPage` (optional): 1-based page range
+- `preserveLayout` (optional): uses `pdftotext -layout`
+- `rawOrder` (optional): uses `pdftotext -raw`
+- `maxChars` (optional): maximum characters returned (default `40000`)
+
+Example prompt:
+
+```text
+Read from docs/some-pdf-file.pdf, pages 2-4, preserving layout.
+```

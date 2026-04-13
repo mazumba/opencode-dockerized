@@ -1,0 +1,15 @@
+{
+  "finding_id": "SEC-YYYY-NNNN",
+  "project": "",
+  "environment": "",
+  "area": "",
+  "severity": "medium",
+  "asset": "",
+  "summary": "",
+  "evidence": "",
+  "impact": "",
+  "likelihood": "",
+  "recommended_control": "",
+  "owner": "",
+  "status": "open"
+}
