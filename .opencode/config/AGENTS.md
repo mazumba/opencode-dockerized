@@ -7,7 +7,7 @@ This file defines default behavior for OpenCode across projects. It sets cost/pe
 - For tiny lookups (single file/symbol), direct `glob`/`grep`/`read` is allowed to avoid handoff overhead.
 - When using direct exploration for anything beyond a tiny lookup, briefly justify why `explore` was not used.
 
-## Balanced Mode
+## Exploration Policy (Balanced)
 
 - Start with one focused `explore` pass; run additional passes only if key gaps remain.
 - Prefer narrow, scoped prompts (specific symbol/path/question) over broad "scan everything" requests.
