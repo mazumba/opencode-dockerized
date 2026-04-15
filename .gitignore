@@ -1,4 +1,5 @@
-.opencode
+.opencode/config/*
+!.opencode/config/AGENTS.md
 !.opencode/config/agents
 !.opencode/config/commands
 !.opencode/config/skills
@@ -6,6 +7,8 @@
 
 .opencode/share/*
 !.opencode/share/.gitkeep
+
+package-lock.json
 
 compose.override.yml
 
