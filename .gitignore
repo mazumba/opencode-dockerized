@@ -1,4 +1,4 @@
-.opencode/config/*
+.opencode
 !.opencode/config/agents
 !.opencode/config/commands
 !.opencode/config/skills

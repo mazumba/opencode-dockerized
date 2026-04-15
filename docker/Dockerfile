@@ -2,6 +2,7 @@ FROM debian:bookworm-slim
 
 ARG USER_UID=1000
 ARG USER_GID=1000
+ARG OPENCODE_VERSION=1.4.3
 
 RUN apt-get update && apt-get install -y \
     curl \
@@ -29,7 +30,7 @@ RUN if ! getent group ${USER_GID} > /dev/null 2>&1; then \
     && useradd -m -u ${USER_UID} -g ${USER_GID} -s /bin/bash opencode
 
 USER opencode
-RUN curl -fsSL https://opencode.ai/install | bash -s -- --version 1.3.3 \
+RUN curl -fsSL https://opencode.ai/install | bash -s -- --version ${OPENCODE_VERSION} \
     && mkdir -p /home/opencode/.local/state/opencode \
     && mkdir -p /home/opencode/.local/share/opencode \
     && mkdir -p /home/opencode/.config/opencode
