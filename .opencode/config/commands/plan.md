@@ -4,12 +4,13 @@ subtask: true
 agent: build
 ---
 
-Turn the research document in `$ARGUMENTS` into a concrete, step-by-step implementation plan.
+Turn the research document in `docs/thoughts/$1` into a concrete, step-by-step implementation plan.
+Use the additional information: `$2`
 
 ## What to do
 
-Read `$ARGUMENTS/research.md` in full before doing anything else.
-Write your output to `$ARGUMENTS/plan.md`.
+Read `docs/thoughts/$1/research.md` in full before doing anything else.
+Write your output to `docs/thoughts/$1/plan.md`.
 
 If the research document contains Open Questions that are not yet answered, state that planning cannot proceed and list what needs to be resolved first.
 
@@ -29,7 +30,7 @@ Write `plan.md` using this structure (target ~150–200 lines):
 ## Implementation Steps
 
 ### Step 1: <short title>
-**Files:** `path/to/file.php`, `path/to/other.php`
+**Files:** `path/to/file`, `path/to/other`
 **Changes:** <precise description of what to add/change/remove>
 **Verify:** <command or assertion to confirm this step is correct before moving on>
 
@@ -39,7 +40,6 @@ Write `plan.md` using this structure (target ~150–200 lines):
 
 ## Quality Gate
 After all steps: `make dev-init && make rector-fix && make phpcs-fix && make phpstan && make phpunit`
-Note any steps that require `make create-migration` before running the gate.
 
 ## Skills to Update
 <list any .opencode/skills/ files that must be updated after implementation to reflect the changes>
@@ -56,8 +56,7 @@ Note any steps that require `make create-migration` before running the gate.
 - **Load relevant skills** for every domain the plan touches.
 - **Reference exact file paths** in every step — not directories.
 - **Every step needs a Verify command** so progress is checkable.
-- **Flag schema and asset steps** — any step touching DB schema needs `make create-migration`; any step touching assets needs `make dev-init`.
-- **Never hand-write migration files.** Always use `make create-migration`.
+- **Flag schema and asset steps** — any step touching DB schema needs a migration; any step touching assets needs initialization.
 - **Never create git commits.**
 
-After writing the document, confirm the path and suggest running `/implement $ARGUMENTS` when ready.
+After writing the document, confirm the path and suggest running `/implement docs/thoughts/$1` when ready.

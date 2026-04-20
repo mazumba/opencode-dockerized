@@ -4,19 +4,21 @@ This page documents repository-specific slash commands, the skill layout, and cu
 
 ## Slash commands
 
-| Command | Purpose |
-|---|---|
-| `/research <task>` | RPI phase 1 - explores the codebase and writes a research doc to `docs/thoughts/` |
-| `/deep-research <task>` | Same as `/research` but uses Claude Opus for harder problems |
-| `/plan <artifact-folder>` | RPI phase 2 - turns a research doc into a numbered implementation plan |
-| `/implement <artifact-folder>` | RPI phase 3 - executes the plan step by step and runs the quality gate |
-| `/skill <skill-name> "<description hint>"` | Scaffolds a new skill folder |
-| `/security-profile [init\|refresh] [project-name]` | Creates or refreshes a project-specific defensive `security-profile` skill from `security-core` |
+| Command                                                     | Purpose                                                                                         |
+|-------------------------------------------------------------|-------------------------------------------------------------------------------------------------|
+| `/research <task-title> "<additional information>"`         | RPI phase 1 - explores the codebase and writes a research doc to `docs/thoughts/`               |
+| `/deep-research <task-title> "<additional information>"`    | Same as `/research` but uses Claude Opus for harder problems                                    |
+| `/plan <artifact-folder> "<additional information>"`        | RPI phase 2 - turns a research doc into a numbered implementation plan                          |
+| `/update-plan <artifact-folder> "<additional information>"` | RPI helper - updates an existing plan using newly answered questions                            |
+| `/implement <artifact-folder>`                              | RPI phase 3 - executes the plan step by step and runs the quality gate                          |
+| `/skill <skill-name> "<description hint>"`                  | Scaffolds a new skill folder                                                                    |
+| `/security-profile [init\|refresh] [project-name]`          | Creates or refreshes a project-specific defensive `security-profile` skill from `security-core` |
 
 The RPI workflow is `research -> plan -> implement`:
 
 - `research` reads and maps the codebase only
 - `plan` converts findings into a step-by-step plan only
+- `update-plan` revises an existing `plan.md` with new answers/context only
 - `implement` executes the plan and runs verification gates
 
 ## Per-project security profile

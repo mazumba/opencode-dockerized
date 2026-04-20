@@ -1,17 +1,31 @@
 # opencode-dockerized
 
-Run [opencode](https://opencode.ai) inside a Docker container - a practical alternative to installing it locally, useful if you prefer to keep your local machine clean.
+Run [opencode](https://opencode.ai) inside Docker instead of installing it locally.
 
-## Prerequisites
+## Quick Start
 
-Copy the override template and set the **full absolute path** to your projects directory.
-Full paths are required to avoid Docker-in-Docker volume mounting issues:
+```sh
+# 1) Build image (run once, or after Dockerfile changes)
+make opencode-build
+
+# 2) Start container
+make opencode-run
+# -> http://localhost:4096
+
+# 3) Stop and remove container
+make opencode-down
+```
+
+## Initial Setup
+
+Before first run, copy the override template and set the **full absolute path** to your projects directory.
+Full paths are required to avoid Docker-in-Docker volume mounting issues.
 
 ```sh
 cp compose.override.yml.dist compose.override.yml
 ```
 
-Then edit `compose.override.yml` and replace the placeholder path:
+Edit `compose.override.yml` and replace the placeholder path:
 
 ```yaml
 services:
@@ -20,58 +34,26 @@ services:
       - /full/path/to/my/projects:/full/path/to/my/projects
 ```
 
-## Usage
-
-```sh
-# Build the image (run once, or after Dockerfile changes)
-make opencode-build
-
-# Start the container
-make opencode-run
-# → http://localhost:4096
-
-# Tear down
-make opencode-down
-```
-
 The container runs as a non-root user matching your host `UID`/`GID` (detected automatically by the `Makefile`).
-
-## Docker socket access
-
-The container mounts `/var/run/docker.sock` so opencode can run Docker commands on the host.
-Socket permissions are handled automatically at container startup by `docker/entrypoint.sh`:
-it reads the GID that owns the socket and adds the `opencode` user to that group before
-dropping privileges. No manual configuration is needed.
-
-Note that mounting the Docker socket gives the container full access to the host Docker daemon,
-so this setup does not provide meaningful isolation from the host.
-
-| Host OS                | Typical socket GID |
-|------------------------|--------------------|
-| macOS (Docker Desktop) | `0` (`root`)       |
-| Linux (Docker Engine)  | `999` or varies    |
 
 ## Authentication (`auth.json`)
 
-If you already have opencode installed locally and are authenticated, you can copy your
-existing credentials into the share directory to avoid re-authenticating inside the container:
+If you already use opencode locally, you can reuse existing credentials and skip signing in again:
 
 ```sh
 # macOS / Linux
 cp ~/.local/share/opencode/auth.json .opencode/share/auth.json
 ```
 
-Otherwise, start the container with `make opencode-run`, open `http://localhost:4096`, and
-authenticate through the UI. The credentials will be written to `.opencode/share/auth.json`
-automatically.
+Otherwise, run `make opencode-run`, open `http://localhost:4096`, and authenticate in the UI.
+Credentials are written automatically to `.opencode/share/auth.json`.
 
-> **Note:** `auth.json` may contain provider tokens. It is covered by `.gitignore` and will
-> not be committed to version control.
+> **Note:** `auth.json` may contain provider tokens. It is covered by `.gitignore` and is not committed.
 
 ## Configuration (`opencode.json`)
 
-The container maps `.opencode/config/` to the opencode config directory inside the container.
-Create or edit `.opencode/config/opencode.json` to customise behaviour:
+`.opencode/config/` is mapped to the opencode config directory inside the container.
+Create or edit `.opencode/config/opencode.json` to customize behavior:
 
 ```json
 {
@@ -86,14 +68,14 @@ Create or edit `.opencode/config/opencode.json` to customise behaviour:
 }
 ```
 
-This file is gitignored so it is safe to customise locally without affecting others.
+This file is gitignored, so local customization does not affect others.
 
 ### Permissions
 
-The `permission` field controls which tool calls require your approval before execution.
+The `permission` field controls which tool calls require approval.
 The example above asks for confirmation on every `bash` command while allowing everything else.
 
-To require approval for more tools, add them explicitly:
+To require approval for additional tools:
 
 ```json
 {
@@ -106,19 +88,33 @@ To require approval for more tools, add them explicitly:
 }
 ```
 
-See the [permissions docs](https://opencode.ai/docs/permissions) for all available options.
+See the [permissions docs](https://opencode.ai/docs/permissions) for all options.
 
-Happy agentic coding!
+## Docker Socket Access
 
-## Custom commands, skills, and tools
+The container mounts `/var/run/docker.sock` so opencode can run Docker commands on the host.
+Socket permissions are handled automatically at startup by `docker/entrypoint.sh`:
+it reads the socket owner GID and adds the `opencode` user to that group before dropping privileges.
+
+Mounting the Docker socket grants the container full access to the host Docker daemon,
+so this setup does not provide meaningful isolation from the host.
+
+| Host OS                | Typical socket GID |
+|------------------------|--------------------|
+| macOS (Docker Desktop) | `0` (`root`)       |
+| Linux (Docker Engine)  | `999` or varies    |
+
+## Further Reading
 
 This repo includes custom slash commands, a reusable skill system, and a PDF extraction tool.
 
 See [OpenCode commands, skills, and tools](docs/opencode-commands-skills-tools.md) for the full command catalog and skill/tool reference.
 
-If you only need the defensive baseline in a project, run:
+If you only need the defensive baseline in a project:
 
 ```sh
 /security-profile init
 /security-profile refresh
 ```
+
+Happy agentic coding! Suggestions welcome!

@@ -38,21 +38,21 @@ Under `.opencode/skills/security-profile/` ensure these files exist:
 {
   "project": "<string>",
   "stack": ["<string>"],
-  "environments": ["dev", "staging", "production"],
+  "environments": ["<environment-name>"],
   "severity_sla_days": {
-    "critical": 0,
-    "high": 7,
-    "medium": 30,
-    "low": 90,
-    "informational": 999
+    "critical": "<days>",
+    "high": "<days>",
+    "medium": "<days>",
+    "low": "<days>",
+    "informational": "<days>"
   },
   "risk_threshold": {
     "block_release_at_or_above": "high"
   },
   "ci_verify_commands": ["<command>"],
   "ownership": {
-    "security": "<team-or-handle>",
-    "default_service_owner": "<team-or-handle>"
+    "security": "<team-or-individual>",
+    "default_service_owner": "<team-or-individual>"
   },
   "defensive_only": true
 }
@@ -72,6 +72,7 @@ Under `.opencode/skills/security-profile/` ensure these files exist:
    - project name from root directory or manifest
    - stack from common files (`composer.json`, `package.json`, `pyproject.toml`, `go.mod`, `Dockerfile`, `*.tf`)
    - CI verify commands from existing project tooling
+   - environments from CI/deploy config when available, otherwise use conservative defaults and ask
 4. Ensure `.opencode/skills/security-profile/` exists with required files.
 5. Write or update files:
 
@@ -108,11 +109,12 @@ Under `.opencode/skills/security-profile/` ensure these files exist:
 
 ### `config.json`
 
-- On `init`, create with inferred defaults.
-- On `refresh`, preserve user-owned fields when present; only patch missing or stale inferred values.
+- On `init`, create with inferred values plus safe starter defaults.
+- If SLAs or environments cannot be inferred reliably, ask concise follow-up questions before finalizing.
+- On `refresh`, preserve user-owned policy fields (SLA, risk threshold, ownership, environments) when present; only patch missing or clearly stale inferred values.
 - Always enforce `"defensive_only": true`.
 
-6. If required values cannot be inferred (owner handles, release gate preference, env list), ask concise questions and then update `config.json`.
+6. If required values cannot be inferred (owners, release gate preference, environments, SLA targets), ask concise questions and then update `config.json`.
 
 ## Rules you must follow
 
