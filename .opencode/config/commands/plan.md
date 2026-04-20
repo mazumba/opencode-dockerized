@@ -5,7 +5,6 @@ agent: build
 ---
 
 Turn the research document in `docs/thoughts/$1` into a concrete, step-by-step implementation plan.
-Use the additional information: `$2`
 
 ## What to do
 
@@ -13,6 +12,7 @@ Read `docs/thoughts/$1/research.md` in full before doing anything else.
 Write your output to `docs/thoughts/$1/plan.md`.
 
 If the research document contains Open Questions that are not yet answered, state that planning cannot proceed and list what needs to be resolved first.
+Check, if these are the answers to the Open Questions and resolve them in the plan file, if that is the case: `$2`.
 
 Also read `AGENTS.md` (Rules and Quality Gates sections) to ensure the plan respects all project constraints. Load relevant skills from `.opencode/skills/` for any domain touched by the task.
 
