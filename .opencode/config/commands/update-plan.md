@@ -34,4 +34,4 @@ Preserve the existing plan structure:
 - **Keep exact file paths** in each step.
 - **Every step must include a Verify command.**
 
-After updating, confirm the path and suggest running `/implement docs/thoughts/$1` when ready.
+After updating, confirm the path and suggest running `/implement $1` when ready.

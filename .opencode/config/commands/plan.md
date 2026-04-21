@@ -59,4 +59,4 @@ After all steps: `make dev-init && make rector-fix && make phpcs-fix && make php
 - **Flag schema and asset steps** — any step touching DB schema needs a migration; any step touching assets needs initialization.
 - **Never create git commits.**
 
-After writing the document, confirm the path and suggest running `/implement docs/thoughts/$1` when ready.
+After writing the document, confirm the path and suggest running `/implement $1` when ready.

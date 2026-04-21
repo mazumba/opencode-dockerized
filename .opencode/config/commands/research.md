@@ -57,4 +57,4 @@ Write `research.md` using this structure (target ~150–200 lines):
 - **Load relevant skills** before forming any conclusions about patterns or conventions.
 - **Open Questions must be honest.** If anything is ambiguous, list it — do not guess.
 
-After writing the document, confirm the path and suggest running `/plan docs/thoughts/<YYYY-MM-DD>_<slug>` when ready.
+After writing the document, confirm the path and suggest running `/plan <YYYY-MM-DD>_<slug>` when ready.
