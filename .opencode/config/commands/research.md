@@ -13,7 +13,7 @@ Determine today's date using the shell: `date +%Y-%m-%d`
 The artifact folder is: `docs/thoughts/<YYYY-MM-DD>_<slug>/`
 Create that folder and write your output to `docs/thoughts/<YYYY-MM-DD>_<slug>/research.md`.
 
-Before searching the codebase, read `AGENTS.md` in full (Architecture, Rules, and Session Learnings sections), load any relevant skills from `.opencode/skills/` that relate to the task, and check `docs/` for any tooling workarounds related to the task.
+Before searching the codebase, read `AGENTS.md` in full, load any relevant skills from `.opencode/skills/`, and check `docs/` for any tooling workarounds related to the task.
 
 Use the `explore` subagent for all file discovery and code reading tasks to keep this context clean. Invoke it with focused, specific questions and collect only the compacted summaries it returns.
 

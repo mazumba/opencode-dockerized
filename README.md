@@ -2,6 +2,12 @@
 
 Run [opencode](https://opencode.ai) inside Docker instead of installing it locally.
 
+## Documentation Map
+
+- `README.md` (this file): Docker setup, run flow, auth, config, and security notes.
+- `docs/opencode-commands-skills-tools.md`: slash commands, skills, and custom tool reference.
+- `.opencode/config/AGENTS.md`: default agent behavior and skill loading policy.
+
 ## Quick Start
 
 ```sh
@@ -69,6 +75,15 @@ Create or edit `.opencode/config/opencode.json` to customize behavior:
 ```
 
 This file is gitignored, so local customization does not affect others.
+
+### Agent Defaults (`AGENTS.md`)
+
+This repo uses `.opencode/config/AGENTS.md` to define default skill-loading behavior.
+
+- `concise-precise` is loaded by default for user-facing responses.
+- `karpathy-guidelines` is loaded on top for non-trivial code changes.
+
+This means response style stays concise by default, while coding workflow guidance is added when implementation tasks are complex.
 
 ### Permissions
 

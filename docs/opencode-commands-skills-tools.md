@@ -2,12 +2,17 @@
 
 This page documents repository-specific slash commands, the skill layout, and custom tools shipped in this repo.
 
+## At a glance
+
+- Use `README.md` for Docker setup and runtime config.
+- Use this page for slash commands, skills, and custom tool behavior.
+- Repo-local OpenCode config lives under `.opencode/`.
+
 ## Slash commands
 
 | Command                                                     | Purpose                                                                                         |
 |-------------------------------------------------------------|-------------------------------------------------------------------------------------------------|
 | `/research <task-title> "<additional information>"`         | RPI phase 1 - explores the codebase and writes a research doc to `docs/thoughts/`               |
-| `/deep-research <task-title> "<additional information>"`    | Same as `/research` but uses Claude Opus for harder problems                                    |
 | `/plan <artifact-folder> "<additional information>"`        | RPI phase 2 - turns a research doc into a numbered implementation plan                          |
 | `/update-plan <artifact-folder> "<additional information>"` | RPI helper - updates an existing plan using newly answered questions                            |
 | `/implement <artifact-folder>`                              | RPI phase 3 - executes the plan step by step and runs the quality gate                          |
@@ -37,7 +42,14 @@ The profile is defensive-only and intended to complement `.opencode/skills/secur
 
 ## Skills
 
-Skills are domain-knowledge folders loaded on demand. Each skill lives under `.opencode/skills/<skill-name>/` and uses this structure:
+Skills are domain-knowledge folders loaded on demand. In this repo, default skills live under `.opencode/config/skills/<skill-name>/` and use this structure:
+
+### Default-loaded skills in this repo
+
+Repository defaults come from `.opencode/config/AGENTS.md`:
+
+- `concise-precise` is baseline for user-facing responses.
+- `karpathy-guidelines` layers on for non-trivial code changes.
 
 | File / Dir | Purpose |
 |---|---|
@@ -52,6 +64,8 @@ Skills are domain-knowledge folders loaded on demand. Each skill lives under `.o
 ```sh
 /skill <skill-name> "<short description hint>"
 ```
+
+By default, the scaffold command creates `.opencode/skills/<skill-name>/`.
 
 Example:
 

@@ -14,7 +14,7 @@ Write your output to `docs/thoughts/$1/plan.md`.
 If the research document contains Open Questions that are not yet answered, state that planning cannot proceed and list what needs to be resolved first.
 Check, if these are the answers to the Open Questions and resolve them in the plan file, if that is the case: `$2`.
 
-Also read `AGENTS.md` (Rules and Quality Gates sections) to ensure the plan respects all project constraints. Load relevant skills from `.opencode/skills/` for any domain touched by the task.
+Also read `AGENTS.md` to ensure the plan respects all project constraints and verification expectations. Load relevant skills from `.opencode/skills/` for any domain touched by the task.
 
 Write `plan.md` using this structure (target ~150–200 lines):
 
@@ -42,7 +42,7 @@ Write `plan.md` using this structure (target ~150–200 lines):
 After all steps: `make dev-init && make rector-fix && make phpcs-fix && make phpstan && make phpunit`
 
 ## Skills to Update
-<list any .opencode/skills/ files that must be updated after implementation to reflect the changes>
+<list any `.opencode/skills/` files that must be updated after implementation to reflect the changes>
 
 ## Rollback
 <how to undo the changes if something goes wrong>
