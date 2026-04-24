@@ -48,8 +48,8 @@ Skills are domain-knowledge folders loaded on demand. In this repo, default skil
 
 Repository defaults come from `.opencode/config/AGENTS.md`:
 
-- `concise-precise` is baseline for user-facing responses.
-- `karpathy-guidelines` layers on for non-trivial code changes.
+- `concise-precise` is baseline for user-facing responses, inspired by [Julius Brussee's caveman](https://github.com/JuliusBrussee/caveman).
+- `karpathy-guidelines` layers on for non-trivial code changes, based on [Andrej Karpathy's code review guidelines](https://github.com/forrestchang/andrej-karpathy-skills).
 
 | File / Dir | Purpose |
 |---|---|
