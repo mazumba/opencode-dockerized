@@ -24,4 +24,6 @@ This file defines default behavior for OpenCode across projects. It sets cost/pe
 
 ## Skill Loading Default
 
+- Load `concise-precise` by default for all user-facing responses unless the user explicitly requests `normal mode`.
+- Keep `concise-precise` active when loading other skills; treat it as the baseline response style.
 - For any non-trivial code change, load `karpathy-guidelines` by default unless a more specific skill already fully covers the task.
