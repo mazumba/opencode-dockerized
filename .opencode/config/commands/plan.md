@@ -39,7 +39,7 @@ Write `plan.md` using this structure (target ~150–200 lines):
 (continue for all steps)
 
 ## Quality Gate
-After all steps: `make dev-init && make rector-fix && make phpcs-fix && make phpstan && make phpunit`
+After all steps: Run quality gates as provided by the AGENTS.md
 
 ## Skills to Update
 <list any `.opencode/skills/` files that must be updated after implementation to reflect the changes>
