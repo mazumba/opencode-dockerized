@@ -59,4 +59,10 @@ After all steps: Run quality gates as provided by the AGENTS.md
 - **Flag schema and asset steps** — any step touching DB schema needs a migration; any step touching assets needs initialization.
 - **Never create git commits.**
 
-After writing the document, confirm the path and suggest running `/implement $1` when ready.
+## Completion Contract (strict)
+End the plan task with exactly these lines and nothing else, replacing the placeholders:
+This sentence is the handoff artifact for RPI phase 2.
+The main agent must relay this information to the user and nothing else:
+- <YYYY-MM-DD>_<slug>
+- A summary of the created plan
+- Open Questions: <list any open questions or "None">

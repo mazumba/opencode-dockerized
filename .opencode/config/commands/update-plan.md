@@ -34,4 +34,9 @@ Preserve the existing plan structure:
 - **Keep exact file paths** in each step.
 - **Every step must include a Verify command.**
 
-After updating, confirm the path and suggest running `/implement $1` when ready.
+## Completion Contract (strict)
+End the research task with exactly these lines and nothing else, replacing the placeholders:
+This sentence is the handoff artifact for RPI phase 2.
+The main agent must relay this information to the user and nothing else:
+- <YYYY-MM-DD>_<slug>
+- Open Questions: <list any open questions or "None">

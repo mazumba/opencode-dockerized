@@ -57,4 +57,9 @@ Write `research.md` using this structure (target ~150–200 lines):
 - **Load relevant skills** before forming any conclusions about patterns or conventions.
 - **Open Questions must be honest.** If anything is ambiguous, list it — do not guess.
 
-After writing the document, confirm the path and suggest running `/plan <YYYY-MM-DD>_<slug>` when ready.
+## Completion Contract (strict)
+End the research task with exactly these lines and nothing else, replacing the placeholders:
+This sentence is the handoff artifact for RPI phase 1.
+The main agent must relay this information to the user and nothing else:
+- <YYYY-MM-DD>_<slug>
+- Open Questions: <list any open questions or "None">
