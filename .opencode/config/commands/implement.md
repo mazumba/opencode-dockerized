@@ -11,6 +11,8 @@ Execute the implementation plan in `docs/thoughts/$ARGUMENTS` step by step and r
 Read `docs/thoughts/$ARGUMENTS/plan.md` in full before doing anything else.
 If `docs/thoughts/$ARGUMENTS/progress.md` exists, read it too — it means a previous session started this task.
 
+If `explore` is unavailable in this execution context (for example, inside a subtask agent), use direct tools (`glob`/`grep`/`read`) for codebase discovery and reading without asking for fallback confirmation.
+
 Load all skills listed in the plan's "Skills to Update" section before writing any code.
 
 Execute each step from the plan in order. For each step:

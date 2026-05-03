@@ -11,6 +11,8 @@ Update the existing implementation plan in `docs/thoughts/$1` using this new inf
 Read `docs/thoughts/$1/plan.md` in full before doing anything else.
 Update and overwrite `docs/thoughts/$1/plan.md` only.
 
+If `explore` is unavailable in this execution context (for example, inside a subtask agent), use direct tools (`glob`/`grep`/`read`) for codebase discovery and reading without asking for fallback confirmation.
+
 Apply the new information from `$2` to:
 
 - resolve previously open questions or ambiguities

@@ -15,7 +15,7 @@ Create that folder and write your output to `docs/thoughts/<YYYY-MM-DD>_<slug>/r
 
 Before searching the codebase, read `AGENTS.md` in full, load any relevant skills from `.opencode/skills/`, and check `docs/` for any tooling workarounds related to the task.
 
-Use the `explore` subagent for all file discovery and code reading tasks to keep this context clean. Invoke it with focused, specific questions and collect only the compacted summaries it returns.
+Prefer the `explore` subagent for file discovery and code reading tasks to keep this context clean. If `explore` is unavailable in this execution context (for example, inside a subtask agent), use direct tools (`glob`/`grep`/`read`) without asking for fallback confirmation.
 
 Investigate and record:
 
@@ -52,7 +52,7 @@ Write `research.md` using this structure (target ~150–200 lines):
 ## Rules you must follow
 
 - **No code changes.** Your only output is the research document.
-- **Use the explore subagent** for all codebase reading — never read files directly in this context.
+- **Prefer the explore subagent** for codebase reading when available; if unavailable in this execution context, use direct tools (`glob`/`grep`/`read`) directly.
 - **Read AGENTS.md first** before touching the codebase.
 - **Load relevant skills** before forming any conclusions about patterns or conventions.
 - **Open Questions must be honest.** If anything is ambiguous, list it — do not guess.

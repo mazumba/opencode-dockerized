@@ -16,6 +16,8 @@ Check, if these are the answers to the Open Questions and resolve them in the pl
 
 Also read `AGENTS.md` to ensure the plan respects all project constraints and verification expectations. Load relevant skills from `.opencode/skills/` for any domain touched by the task.
 
+If `explore` is unavailable in this execution context (for example, inside a subtask agent), use direct tools (`glob`/`grep`/`read`) for codebase discovery and reading without asking for fallback confirmation.
+
 Write `plan.md` using this structure (target ~150–200 lines):
 
 ```

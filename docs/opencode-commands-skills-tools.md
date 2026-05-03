@@ -26,6 +26,11 @@ The RPI workflow is `research -> plan -> implement`:
 - `update-plan` revises an existing `plan.md` with new answers/context only
 - `implement` executes the plan and runs verification gates
 
+RPI command execution notes:
+
+- Prefer `explore` for reconnaissance when available.
+- If `explore` is unavailable in the current execution context (for example, inside a subtask agent), use direct `glob`/`grep`/`read` without asking for fallback confirmation.
+
 ## Per-project security profile
 
 For each project, run both commands so the repository gets and then maintains its security profile:
