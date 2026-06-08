@@ -86,7 +86,7 @@ If a fix is available:
 - **Wait for approval** before applying
 
 After approval:
-1. Apply the Dockerfile change
+1. Apply the Dockerfile change, adding a separate upgrade line for every distinct package named in the CVE — do not assume upgrading one package will transitively upgrade another.
 2. Follow the quality gate protocol from `AGENTS.md` if it covers image/build steps
 
 #### C — No fix available, or package not reachable
