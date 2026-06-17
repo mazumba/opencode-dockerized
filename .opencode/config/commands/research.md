@@ -52,7 +52,7 @@ Write `research.md` using this structure (target ~150–200 lines):
 ## Rules you must follow
 
 - **No code changes.** Your only output is the research document.
-- **Prefer the explore subagent** for codebase reading when available; if unavailable in this execution context, use direct tools (`glob`/`grep`/`read`) directly.
+- **For codebase reading** use direct tools (`glob`/`grep`/`read`).
 - **Read AGENTS.md first** before touching the codebase.
 - **Load relevant skills** before forming any conclusions about patterns or conventions.
 - **Open Questions must be honest.** If anything is ambiguous, list it — do not guess.
@@ -60,6 +60,6 @@ Write `research.md` using this structure (target ~150–200 lines):
 ## Completion Contract (strict)
 End the research task with exactly these lines and nothing else, replacing the placeholders:
 This sentence is the handoff artifact for RPI phase 1.
-The main agent must relay this information to the user and nothing else:
+The main agent must copy the following lines verbatim to the user and stop. It must NOT summarize, interpret, plan, or add any content beyond these lines:
 - <YYYY-MM-DD>_<slug>
 - Open Questions: <list any open questions or "None">

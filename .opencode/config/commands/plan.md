@@ -16,7 +16,7 @@ Check, if these are the answers to the Open Questions and resolve them in the pl
 
 Also read `AGENTS.md` to ensure the plan respects all project constraints and verification expectations. Load relevant skills from `.opencode/skills/` for any domain touched by the task.
 
-If `explore` is unavailable in this execution context (for example, inside a subtask agent), use direct tools (`glob`/`grep`/`read`) for codebase discovery and reading without asking for fallback confirmation.
+Use direct tools (`glob`/`grep`/`read`) for codebase discovery and reading without asking for fallback confirmation.
 
 Write `plan.md` using this structure (target ~150–200 lines):
 
@@ -64,7 +64,7 @@ After all steps: Run quality gates as provided by the AGENTS.md
 ## Completion Contract (strict)
 End the plan task with exactly these lines and nothing else, replacing the placeholders:
 This sentence is the handoff artifact for RPI phase 2.
-The main agent must relay this information to the user and nothing else:
+The main agent must copy the following lines verbatim to the user and stop:
 - <YYYY-MM-DD>_<slug>
-- A summary of the created plan
+- < A summary of the created plan >
 - Open Questions: <list any open questions or "None">
