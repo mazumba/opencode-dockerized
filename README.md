@@ -58,10 +58,11 @@ They are installed as separate optional layers — the base image stays lean by 
 
 Available plugins:
 
-| Plugin  | Adds |
-|---------|------|
-| `midi`  | `fluidsynth`, `timidity`, `mido`, `pretty_midi`, `music21`, and related Python audio libraries |
-| `excel` | `openpyxl` for reading and writing `.xlsx` files |
+| Plugin    | Adds |
+|-----------|------|
+| `midi`    | `fluidsynth`, `timidity`, `mido`, `pretty_midi`, `music21`, and related Python audio libraries |
+| `excel`   | `openpyxl` for reading and writing `.xlsx` files |
+| `browser` | Playwright Chromium (headless, MCP-controlled) — see [Browser MCP](#browser-mcp-playwright) below |
 
 To enable plugins, set `PLUGINS` in your `.env` file (comma-separated):
 
@@ -75,6 +76,35 @@ Then build with:
 make opencode-build-plugins
 ```
 
+### Browser MCP (Playwright)
+
+The `browser` plugin adds [`@playwright/mcp@0.0.72`](https://github.com/microsoft/playwright-mcp) — a local MCP server that lets the `browse` agent control a headless Chromium browser.
+
+**Opt-in:**
+
+```sh
+# .env
+PLUGINS=browser
+```
+
+```sh
+make opencode-build-plugins
+make opencode-run
+```
+
+**Runtime behavior:**
+
+- **Headless by default.** The browser runs without a visible UI (`PLAYWRIGHT_HEADLESS=true`).
+- **Disabled by default (opt-in).** The MCP entry has `enabled: false`; enable it in `opencode.jsonc` when needed.
+- **Agent-scoped access.** `playwright_*` tools are globally disabled and enabled only for the `browse` agent. All other agents cannot call browser tools. This is agent-scoped, not globally available.
+- **Non-persistent state.** No browser profile or cache is retained across container restarts (non-persistent by design).
+- **Standard outbound network.** The container uses the same outbound network as the base image; no extra network restrictions are added for browser traffic.
+
+**Operations:**
+
+- **Owner:** Repo Maintainers
+- **Cadence:** Monthly dependency/version review + immediate review on any OpenCode release, `@playwright/mcp` release, or CVE advisory. Review cadence: monthly.
+
 To pin a specific OpenCode version, set `OPENCODE_VERSION` in `.env`:
 
 ```sh
@@ -83,10 +113,18 @@ OPENCODE_VERSION=1.15.4
 
 ### Adding a new plugin
 
-Copy the template, fill in the blanks, and drop it in `docker/plugins/`:
+Each plugin lives in its own subdirectory `docker/plugins/<name>/` and may include up to three files:
+
+| File | Purpose | Required |
+|---|---|---|
+| `<name>.dockerfile` | apt/system dependencies injected into the image | Yes |
+| `<name>.package.json` | npm deps merged into `.opencode/config/package.json` at build time | No |
+| `<name>.opencode.jsonc` | MCP config fragment injected into `opencode.jsonc` at build time | No |
+
+Copy the template for the Dockerfile layer:
 
 ```sh
-cp docker/plugins/plugin.dockerfile.dist docker/plugins/myplugin.dockerfile
+cp docker/plugins/plugin.dockerfile.dist docker/plugins/myplugin/myplugin.dockerfile
 ```
 
 The template documents the available package managers (`apt-get`, `pip`) and their conventions for this base image.

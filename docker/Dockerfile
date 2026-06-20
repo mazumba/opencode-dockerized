@@ -14,8 +14,6 @@ RUN apt-get update && apt-get install -y \
     poppler-utils \
     ripgrep
 
-# {{plugins}}
-
 RUN rm -rf /var/lib/apt/lists/*
 
 # Install Docker CLI only (no daemon)
@@ -44,6 +42,8 @@ RUN if [ -n "${OPENCODE_VERSION}" ]; then \
     && mkdir -p /home/opencode/.config/opencode
 
 USER root
+# injection marker for plugin system dependencies (apt or pip). See docker/plugins/plugin.dockerfile.dist for details.
+# {{plugins}}
 
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh

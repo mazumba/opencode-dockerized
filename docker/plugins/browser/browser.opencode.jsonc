@@ -1,0 +1,9 @@
+"playwright": {
+  "type": "local",
+  "command": ["bun", "x", "@playwright/mcp@0.0.72"],
+  "enabled": true,
+  "timeout": 30000,
+  "environment": {
+    "PLAYWRIGHT_HEADLESS": "true"
+  }
+}

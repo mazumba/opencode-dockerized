@@ -4,6 +4,7 @@
 !.opencode/config/commands
 !.opencode/config/skills
 !.opencode/config/tools
+!.opencode/config/opencode.jsonc.base.dist
 
 .opencode/share/*
 !.opencode/share/.gitkeep
