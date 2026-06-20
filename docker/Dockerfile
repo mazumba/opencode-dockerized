@@ -1,4 +1,4 @@
-FROM debian:bookworm-slim
+FROM debian:12.14-slim
 
 ARG USER_UID=1000
 ARG USER_GID=1000
@@ -12,11 +12,15 @@ RUN apt-get update && apt-get install -y \
     make \
     python3 \
     poppler-utils \
-    ripgrep \
-    && rm -rf /var/lib/apt/lists/*
+    ripgrep
+
+# {{plugins}}
+
+RUN rm -rf /var/lib/apt/lists/*
 
 # Install Docker CLI only (no daemon)
-RUN curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc \
+RUN mkdir -p /etc/apt/keyrings \
+    && curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc \
     && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian bookworm stable" \
         > /etc/apt/sources.list.d/docker.list \
     && apt-get update \
@@ -40,6 +44,7 @@ RUN if [ -n "${OPENCODE_VERSION}" ]; then \
     && mkdir -p /home/opencode/.config/opencode
 
 USER root
+
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 

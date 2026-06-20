@@ -1,9 +1,5 @@
 services:
   opencode:
-#   Override the build context and args here, if you want to use a different version of OpenCode:
-    build:
-      args:
-        OPENCODE_VERSION: 1.15.4
     volumes:
 #     IMPORTANT: Use the full path to your projects directory to avoid dind volume mounting issues:
       - /full/path/to/my/projects:/full/path/to/my/projects

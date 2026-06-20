@@ -4,7 +4,8 @@ Run [opencode](https://opencode.ai) inside Docker instead of installing it local
 
 ## Documentation Map
 
-- `README.md` (this file): Docker setup, run flow, auth, config, and security notes.
+- `README.md` (this file): Docker setup, plugins, run flow, auth, config, and security notes.
+- `.env.dist`: template for local environment variables (`PLUGINS`, `OPENCODE_VERSION`, etc.).
 - `docs/opencode-commands-skills-tools.md`: slash commands, skills, and custom tool reference.
 - `.opencode/config/AGENTS.md`: default agent behavior and skill loading policy.
 
@@ -24,8 +25,10 @@ make opencode-down
 
 ## Initial Setup
 
-Before first run, copy the override template and set the **full absolute path** to your projects directory.
-Full paths are required to avoid Docker-in-Docker volume mounting issues.
+Before first run, copy both templates and configure them for your environment.
+
+**1. Compose override** — sets the path to your projects directory.
+Full absolute paths are required to avoid Docker-in-Docker volume mounting issues.
 
 ```sh
 cp compose.override.yml.dist compose.override.yml
@@ -40,7 +43,53 @@ services:
       - /full/path/to/my/projects:/full/path/to/my/projects
 ```
 
+**2. Environment file** — sets local configuration variables.
+
+```sh
+cp .env.dist .env
+```
+
 The container runs as a non-root user matching your host `UID`/`GID` (detected automatically by the `Makefile`).
+
+## Plugins
+
+Plugins extend the base image with additional tools and libraries.
+They are installed as separate optional layers — the base image stays lean by default.
+
+Available plugins:
+
+| Plugin  | Adds |
+|---------|------|
+| `midi`  | `fluidsynth`, `timidity`, `mido`, `pretty_midi`, `music21`, and related Python audio libraries |
+| `excel` | `openpyxl` for reading and writing `.xlsx` files |
+
+To enable plugins, set `PLUGINS` in your `.env` file (comma-separated):
+
+```sh
+PLUGINS=midi,excel
+```
+
+Then build with:
+
+```sh
+make opencode-build-plugins
+```
+
+To pin a specific OpenCode version, set `OPENCODE_VERSION` in `.env`:
+
+```sh
+OPENCODE_VERSION=1.15.4
+```
+
+### Adding a new plugin
+
+Copy the template, fill in the blanks, and drop it in `docker/plugins/`:
+
+```sh
+cp docker/plugins/plugin.dockerfile.dist docker/plugins/myplugin.dockerfile
+```
+
+The template documents the available package managers (`apt-get`, `pip`) and their conventions for this base image.
 
 ## Authentication (`auth.json`)
 

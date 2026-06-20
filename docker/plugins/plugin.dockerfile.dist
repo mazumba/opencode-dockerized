@@ -1,0 +1,26 @@
+# Plugin: <name>
+# <Short description of what this plugin adds>
+#
+# Plugins are injected into the Dockerfile at the "# {{plugins}}" marker.
+#
+# Available package managers:
+#
+#   apt-get  — system/native packages (Debian bookworm)
+#              Use --no-install-recommends to keep the layer lean.
+#
+#   pip      — Python packages, for when no apt package exists
+#              Install python3-pip via apt first.
+#              Always pass --break-system-packages (required on Debian bookworm).
+#              Upgrade pip/setuptools/wheel first if packages require a build step.
+#
+# ─── System packages ───────────────────────────────
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    <package>
+
+# ─── Python packages via pip ───────────────────────
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3-pip \
+    && python3 -m pip install --break-system-packages \
+      <package>

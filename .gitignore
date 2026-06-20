@@ -13,3 +13,6 @@ package-lock.json
 compose.override.yml
 
 .idea
+
+.env
+docker/Dockerfile.generated
