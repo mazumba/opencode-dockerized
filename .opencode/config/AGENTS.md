@@ -28,3 +28,11 @@ This file defines default behavior for OpenCode across projects. It sets cost/pe
 - Load `concise-precise` by default for all user-facing responses unless the user explicitly requests `normal mode`.
 - Keep `concise-precise` active when loading other skills; treat it as the baseline response style.
 - For any non-trivial code change, load `karpathy-guidelines` by default unless a more specific skill already fully covers the task.
+
+## Container Networking
+
+This OpenCode instance runs inside Docker. The following applies to any tool that makes HTTP calls (browser MCP, bash curl, custom tools, etc.):
+
+- To reach services running on the **host machine**, use `host.docker.internal` instead of `localhost`.
+- Example: a local dev server on port 9099 is reachable at `http://host.docker.internal:9099`, not `http://localhost:9099`.
+- `localhost` inside the container refers to the container's own loopback, not the host.

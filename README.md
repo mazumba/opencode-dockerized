@@ -51,6 +51,12 @@ cp .env.dist .env
 
 The container runs as a non-root user matching your host `UID`/`GID` (detected automatically by the `Makefile`).
 
+To pin a specific OpenCode version, set `OPENCODE_VERSION` in `.env`:
+
+```sh
+OPENCODE_VERSION=1.15.4
+```
+
 ## Plugins
 
 Plugins extend the base image with additional tools and libraries.
@@ -95,8 +101,8 @@ make opencode-run
 **Runtime behavior:**
 
 - **Headless by default.** The browser runs without a visible UI (`PLAYWRIGHT_HEADLESS=true`).
-- **Disabled by default (opt-in).** The MCP entry has `enabled: false`; enable it in `opencode.jsonc` when needed.
-- **Agent-scoped access.** `playwright_*` tools are globally disabled and enabled only for the `browse` agent. All other agents cannot call browser tools. This is agent-scoped, not globally available.
+- **Enabled when active.** The MCP entry is `enabled: true` when the browser plugin is active — activating the plugin is the opt-in.
+- **Tool access is user-configurable.** By default all agents can use `playwright_*` tools. Restrict or scope access via `opencode.jsonc` if needed.
 - **Non-persistent state.** No browser profile or cache is retained across container restarts (non-persistent by design).
 - **Standard outbound network.** The container uses the same outbound network as the base image; no extra network restrictions are added for browser traffic.
 
@@ -104,12 +110,6 @@ make opencode-run
 
 - **Owner:** Repo Maintainers
 - **Cadence:** Monthly dependency/version review + immediate review on any OpenCode release, `@playwright/mcp` release, or CVE advisory. Review cadence: monthly.
-
-To pin a specific OpenCode version, set `OPENCODE_VERSION` in `.env`:
-
-```sh
-OPENCODE_VERSION=1.15.4
-```
 
 ### Adding a new plugin
 
@@ -143,15 +143,26 @@ Credentials are written automatically to `.opencode/share/auth.json`.
 
 > **Note:** `auth.json` may contain provider tokens. It is covered by `.gitignore` and is not committed.
 
-## Configuration (`opencode.json`)
+## Configuration (`opencode.jsonc`)
 
 `.opencode/config/` is mapped to the opencode config directory inside the container.
-Create or edit `.opencode/config/opencode.json` to customize behavior:
+The committed template is `.opencode/config/opencode.jsonc.base.dist`. Copy it to get started:
 
-```json
+```sh
+cp .opencode/config/opencode.jsonc.base.dist .opencode/config/opencode.jsonc.base
+```
+
+Edit `opencode.jsonc.base` to customize behavior — providers, models, permissions, agents.
+When you run `make opencode-build-plugins`, this file is used to generate `opencode.jsonc`.
+
+> **Note:** Do not edit `opencode.jsonc` directly — it is a generated file and will be overwritten on the next plugin build. Edit `opencode.jsonc.base` instead.
+
+If you are not using plugins, you can create `opencode.jsonc` directly:
+
+```jsonc
 {
   "$schema": "https://opencode.ai/config.json",
-  "autoupdate": true,
+  "autoupdate": false,
   "share": "disabled",
   "enabled_providers": ["github-copilot"],
   "permission": {
@@ -161,7 +172,7 @@ Create or edit `.opencode/config/opencode.json` to customize behavior:
 }
 ```
 
-This file is gitignored, so local customization does not affect others.
+Both files are gitignored, so local customization does not affect others.
 
 ### Agent Defaults (`AGENTS.md`)
 

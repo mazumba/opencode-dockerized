@@ -110,8 +110,8 @@ The `browser` plugin provides [`@playwright/mcp@0.0.72`](https://github.com/micr
 **How it works:**
 
 - Enabled with `PLUGINS=browser` in `.env`, then `make opencode-build-plugins` (opt-in).
-- The MCP entry is committed as `enabled: false` (opt-in at runtime).
-- `playwright_*` tools are globally disabled; only the `browse` agent has them enabled (agent-scoped).
+- The MCP entry is `enabled: true` by default when the plugin is active — activating the plugin is the opt-in.
+- Tool access policy (`playwright_*`) is user-configurable via `opencode.jsonc`.
 - Browser state is not persisted across restarts (non-persistent).
 - Headless by default (`PLAYWRIGHT_HEADLESS=true`); no headed debug mode unless configured manually.
 - Standard container outbound network — no extra restrictions or proxying for browser traffic.
