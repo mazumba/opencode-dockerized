@@ -103,8 +103,15 @@ make opencode-run
 - **Headless by default.** The browser runs without a visible UI (`PLAYWRIGHT_HEADLESS=true`).
 - **Enabled when active.** The MCP entry is `enabled: true` when the browser plugin is active — activating the plugin is the opt-in.
 - **Tool access is user-configurable.** By default all agents can use `playwright_*` tools. Restrict or scope access via `opencode.jsonc` if needed.
+- **Configured agents need explicit tool access.** If an agent in `opencode.jsonc` has a `tools` block, `playwright_*` tools are not granted automatically — you must add them:
+  ```jsonc
+  "tools": {
+    "playwright_*": true
+  }
+  ```
 - **Non-persistent state.** No browser profile or cache is retained across container restarts (non-persistent by design).
 - **Standard outbound network.** The container uses the same outbound network as the base image; no extra network restrictions are added for browser traffic.
+- **Reaching host services.** To access services running on the host machine from within the browser (e.g. a local dev server), use `host.docker.internal` instead of `localhost`.
 
 **Operations:**
 
