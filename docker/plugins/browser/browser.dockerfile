@@ -17,9 +17,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpango-1.0-0 \
     libcairo2 \
     libatspi2.0-0 \
+    unzip \
     && rm -rf /var/lib/apt/lists/*
+
+# Install bun runtime system-wide (needed at build time for chromium install and at runtime for the MCP server)
+RUN curl -fsSL https://bun.sh/install | BUN_INSTALL=/usr/local bash
 
 # Install Chromium browser binary into the opencode user's home directory
 USER opencode
-RUN /home/opencode/.opencode/bin/bun x playwright@0.0.72 install chromium
+RUN bun x playwright@1.60.0-alpha-1777566615000 install chromium
 USER root

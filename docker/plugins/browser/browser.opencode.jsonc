@@ -1,6 +1,6 @@
 "playwright": {
   "type": "local",
-  "command": ["bun", "x", "@playwright/mcp@0.0.72"],
+  "command": ["bun", "x", "@playwright/mcp@0.0.72", "--browser", "chromium"],
   "enabled": true,
   "timeout": 30000,
   "environment": {
