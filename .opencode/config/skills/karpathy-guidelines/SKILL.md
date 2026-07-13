@@ -1,7 +1,7 @@
 ---
 name: karpathy-guidelines
-description: Use for most non-trivial coding tasks (writing, reviewing, debugging, or refactoring) to reduce overcomplication, make surgical changes, surface assumptions, and define verifiable success criteria.
-license: MIT
+description: > 
+  Always used to reduce overcomplication, make surgical changes, surface assumptions, and define verifiable success criteria.
 ---
 
 # Karpathy Guidelines

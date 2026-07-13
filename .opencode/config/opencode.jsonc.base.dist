@@ -8,5 +8,9 @@
   "mcp": {
     // injection marker for MCP plugin configuration fragments; see docker/plugins/plugin.dockerfile.dist for details
     // {{mcp-plugins}}
-  }
+  },
+  "plugin": [
+      "oh-my-opencode-slim"
+    ],
+    "lsp": true
 }
