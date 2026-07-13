@@ -3,6 +3,7 @@ FROM debian:12.14-slim
 ARG USER_UID=1000
 ARG USER_GID=1000
 ARG OPENCODE_VERSION=
+ARG OH_MY_OPENCODE_SLIM_VERSION=
 
 RUN apt-get update && apt-get install -y \
     curl \
@@ -12,7 +13,8 @@ RUN apt-get update && apt-get install -y \
     make \
     python3 \
     poppler-utils \
-    ripgrep
+    ripgrep \
+    unzip
 
 RUN rm -rf /var/lib/apt/lists/*
 
@@ -40,6 +42,13 @@ RUN if [ -n "${OPENCODE_VERSION}" ]; then \
     && mkdir -p /home/opencode/.local/state/opencode \
     && mkdir -p /home/opencode/.local/share/opencode \
     && mkdir -p /home/opencode/.config/opencode
+
+RUN curl -fsSL https://bun.sh/install | bash
+RUN if [ -n "${OH_MY_OPENCODE_SLIM_VERSION}" ]; then \
+        /home/opencode/.bun/bin/bunx oh-my-opencode-slim@${OH_MY_OPENCODE_SLIM_VERSION} install; \
+    else \
+        /home/opencode/.bun/bin/bunx oh-my-opencode-slim@latest install; \
+    fi
 
 USER root
 # injection marker for plugin system dependencies (apt or pip). See docker/plugins/plugin.dockerfile.dist for details.

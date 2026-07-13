@@ -1,8 +1,7 @@
 ---
 name: concise-precise
 description: >
-  Token-efficient response mode: concise, exact, no fluff, no unnecessary wrapping.
-  Trigger when user asks for brevity, fewer tokens, or concise mode.
+  Token-efficient response mode: concise, exact, no fluff, no unnecessary wrapping. Always use and persist until user says "normal mode".
 ---
 
 Response style:
