@@ -43,17 +43,19 @@ RUN if [ -n "${OPENCODE_VERSION}" ]; then \
     && mkdir -p /home/opencode/.local/share/opencode \
     && mkdir -p /home/opencode/.config/opencode
 
-RUN curl -fsSL https://bun.sh/install | bash
-RUN if [ -n "${OH_MY_OPENCODE_SLIM_VERSION}" ]; then \
-        /home/opencode/.bun/bin/bunx oh-my-opencode-slim@${OH_MY_OPENCODE_SLIM_VERSION} install; \
-    else \
-        /home/opencode/.bun/bin/bunx oh-my-opencode-slim@latest install; \
-    fi
-
 USER root
 # injection marker for plugin system dependencies (apt or pip). See docker/plugins/plugin.dockerfile.dist for details.
 # {{plugins}}
 
+USER opencode
+RUN curl -fsSL https://bun.sh/install | bash
+RUN if [ -n "${OH_MY_OPENCODE_SLIM_VERSION}" ]; then \
+        bun x oh-my-opencode-slim@${OH_MY_OPENCODE_SLIM_VERSION} install; \
+    else \
+        bun x oh-my-opencode-slim@latest install; \
+    fi
+
+USER root
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 

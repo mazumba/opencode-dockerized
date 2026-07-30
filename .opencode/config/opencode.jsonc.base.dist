@@ -10,7 +10,7 @@
     // {{mcp-plugins}}
   },
   "plugin": [
-      "oh-my-opencode-slim"
-    ],
-    "lsp": true
+    "oh-my-opencode-slim"
+  ],
+  "lsp": true
 }
