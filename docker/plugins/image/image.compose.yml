@@ -1,0 +1,12 @@
+# Plugin: image — Compose fragment
+# Persists the ClamAV signature database across container recreations so
+# `freshclam` (run by image.entrypoint.sh at startup) doesn't have to
+# re-download the full database every time. Only mounted when the `image`
+# plugin is selected via PLUGINS, through docker/compose-with-plugins.sh.
+services:
+  opencode:
+    volumes:
+      - clamav_db:/var/lib/clamav
+
+volumes:
+  clamav_db:

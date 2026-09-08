@@ -15,6 +15,23 @@ if [ -S /var/run/docker.sock ]; then
     usermod -aG "${SOCK_GID}" opencode
 fi
 
+# Run plugin-provided startup hooks, if any, as root, in lexical order.
+# Hooks are optional POSIX shell scripts installed at build time by
+# docker/build-plugins.sh under /usr/local/lib/opencode/entrypoint.d/ (see
+# docker/plugins/plugin.dockerfile.dist for the naming convention). This
+# script remains plugin-agnostic: it only knows the directory convention.
+#
+# Each hook runs as a separate `sh` process. `set -e` above means any hook
+# that exits non-zero aborts container startup before gosu drops privileges.
+HOOK_DIR=/usr/local/lib/opencode/entrypoint.d
+if [ -d "$HOOK_DIR" ]; then
+    for hook in "$HOOK_DIR"/*.sh; do
+        [ -f "$hook" ] || continue
+        echo "entrypoint: running startup hook $(basename "$hook")"
+        sh "$hook"
+    done
+fi
+
 # Drop privileges and exec the real command as the opencode user.
 # gosu reads /etc/group at exec time, so the new group membership is picked up.
 exec gosu opencode "$@"

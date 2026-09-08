@@ -26,27 +26,22 @@ type CopilotUserInfo = {
 }
 
 function formatQuota(id: string, q: QuotaSnapshot): string {
+  const label = id.replaceAll("_", " ").replace(/^./, (char) => char.toUpperCase())
   if (q.unlimited) {
-    return `  ${id}: unlimited`
+    return `  ${label}: unlimited`
   }
   const used = q.entitlement - q.remaining
   const pctUsed = (100 - q.percent_remaining).toFixed(1)
-  const bar = buildBar(q.percent_remaining, 20)
-  let line = `  ${id}: ${used} / ${q.entitlement} used (${pctUsed}%) ${bar}`
+  let line = `  ${label}: ${used} of ${q.entitlement} used (${pctUsed}%)\n  remaining: ${q.remaining}`
   if (q.overage_count > 0) {
     line += `  [+${q.overage_count} overage${q.overage_permitted ? "" : " — not permitted"}]`
   }
   return line
 }
 
-function buildBar(percentRemaining: number, width: number): string {
-  const filled = Math.round(((100 - percentRemaining) / 100) * width)
-  return "[" + "█".repeat(filled) + "░".repeat(width - filled) + "]"
-}
-
 export default tool({
   description:
-    "Check your GitHub Copilot quota and usage. Shows remaining premium interactions, chat usage, completions, and plan details for the current billing period.",
+    "Check your GitHub Copilot quota and usage. Shows used and remaining premium interactions, chat usage, completions, and plan details for the current billing period.",
   args: {},
   async execute(_args, _context) {
     // Read GitHub OAuth token from OpenCode's auth store

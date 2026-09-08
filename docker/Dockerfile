@@ -56,6 +56,13 @@ RUN if [ -n "${OH_MY_OPENCODE_SLIM_VERSION}" ]; then \
     fi
 
 USER root
+# Directory for plugin-provided startup hooks. Always created so entrypoint.sh
+# can safely iterate it even when no plugin ships a hook.
+RUN mkdir -p /usr/local/lib/opencode/entrypoint.d
+
+# injection marker for plugin startup hooks (optional). See docker/plugins/plugin.dockerfile.dist for details.
+# {{plugin-hooks}}
+
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 

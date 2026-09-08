@@ -69,6 +69,7 @@ Available plugins:
 | `midi`    | `fluidsynth`, `timidity`, `mido`, `pretty_midi`, `music21`, and related Python audio libraries |
 | `excel`   | `openpyxl` for reading and writing `.xlsx` files |
 | `browser` | Playwright Chromium (headless, MCP-controlled) — see [Browser MCP](#browser-mcp-playwright) below |
+| `image`   | `vips` (re-encode/strip images), `exiftool` (inspect metadata), `clamav`/`clamav-freshclam` (scan for malware) — see [Image plugin](#image-plugin) below |
 
 To enable plugins, set `PLUGINS` in your `.env` file (comma-separated):
 
@@ -118,15 +119,63 @@ make opencode-run
 - **Owner:** Repo Maintainers
 - **Cadence:** Monthly dependency/version review + immediate review on any OpenCode release, `@playwright/mcp` release, or CVE advisory. Review cadence: monthly.
 
+### Image plugin
+
+The `image` plugin installs `vips` (via `libvips-tools`), `exiftool` (via `libimage-exiftool-perl`), and `clamav`/`clamav-freshclam`. `vips`, `exiftool`, and `clamscan` are CLI tools the agent invokes manually per file (see the recommended order below) — they do not run on a schedule or watch for files.
+
+**Opt-in:**
+
+```sh
+# .env
+PLUGINS=image
+```
+
+```sh
+make opencode-build-plugins
+make opencode-run
+```
+
+**Startup behavior:** every container start runs `docker/plugins/image/image.entrypoint.sh` as root, before the privilege drop to the `opencode` user:
+
+1. `freshclam --stdout` updates the virus definitions. This requires network access to the ClamAV signature mirrors on every start — there is no startup-time skip or caching of "already up to date"; the update runs unconditionally. If it fails, container startup fails (fail-closed) rather than starting with stale or missing definitions.
+2. The hook then proves the final `opencode` user can actually load and use that database, by running `gosu opencode clamscan --no-summary -- /usr/bin/true` against a harmless, stable file. If this readiness check fails, startup also fails.
+
+The virus definitions in `/var/lib/clamav` persist across container recreations **only** when the `image` plugin's Compose fragment is applied (i.e. you build/run through `docker/compose-with-plugins.sh`, which the `Makefile` targets do) — it declares the named volume `clamav_db` mounted at `/var/lib/clamav`. Without that fragment, `freshclam` re-downloads the full database on every start.
+
+**Recommended first-pass order for an untrusted image** (virus definitions are already current thanks to the startup hook above):
+
+1. Scan the original file:
+   ```sh
+   clamscan "/path/to/input.jpg"
+   ```
+2. Decode and re-encode with `vips`, stripping metadata explicitly. The `[strip]` option must be set per output format (JPEG, PNG, WebP):
+   ```sh
+   vips copy "/path/to/input.jpg" "/path/to/output.jpg[strip]"
+   ```
+3. Inspect the re-encoded output with ExifTool — some technical fields (image dimensions, color profile, format-level tags) are always present and expected; the goal is confirming no unexpected metadata survived, not an empty report:
+   ```sh
+   exiftool "/path/to/output.jpg"
+   ```
+4. Scan the re-encoded output again:
+   ```sh
+   clamscan "/path/to/output.jpg"
+   ```
+
+**`clamscan` exit codes:** `0` = clean, `1` = virus/malware detected, `2` = error (e.g. file access, corrupted definitions). Treat a non-zero exit as a signal to stop and investigate manually — do not script automatic deletion of flagged files.
+
+**Important caveat:** ClamAV scanning supplements the vips re-encode step; it does not prove a file is safe or uncompromised. Signature-based scanning only catches known threats, and image parsers can have undiscovered vulnerabilities. Re-encoding through `vips` (which discards the original byte stream and rebuilds pixel data) is the primary defense; ClamAV is a secondary check, not a guarantee.
+
 ### Adding a new plugin
 
-Each plugin lives in its own subdirectory `docker/plugins/<name>/` and may include up to three files:
+Each plugin lives in its own subdirectory `docker/plugins/<name>/` and may include up to five files:
 
 | File | Purpose | Required |
 |---|---|---|
 | `<name>.dockerfile` | apt/system dependencies injected into the image | Yes |
 | `<name>.package.json` | npm deps merged into `.opencode/config/package.json` at build time | No |
 | `<name>.opencode.jsonc` | MCP config fragment injected into `opencode.jsonc` at build time | No |
+| `<name>.entrypoint.sh` | startup hook run as root before the privilege drop (see [Image plugin](#image-plugin) for an example) | No |
+| `<name>.compose.yml` | Compose fragment layered onto `compose.yml` via `docker/compose-with-plugins.sh` | No |
 
 Copy the template for the Dockerfile layer:
 

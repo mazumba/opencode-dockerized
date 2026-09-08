@@ -1,7 +1,7 @@
 # Plugin: <name>
 # <Short description of what this plugin adds>
 #
-# Plugin convention: each plugin lives in docker/plugins/<name>/ and may carry up to three files:
+# Plugin convention: each plugin lives in docker/plugins/<name>/ and may carry up to five files:
 #
 #   <name>.dockerfile        — system/apt dependencies (required)
 #                              Injected into Dockerfile.generated at the "# {{plugins}}" marker.
@@ -14,7 +14,31 @@
 #                              Injected into .opencode/config/opencode.jsonc at the
 #                              "// {{mcp-plugins}}" marker inside the "mcp" block.
 #
-# Only <name>.dockerfile is required; the other two are optional.
+#   <name>.entrypoint.sh     — startup hook (optional)
+#                              A POSIX `sh` script. build-plugins.sh validates it with
+#                              `sh -n` and injects a `COPY --chmod=0755` instruction at the
+#                              "# {{plugin-hooks}}" marker in Dockerfile, installing it as
+#                              /usr/local/lib/opencode/entrypoint.d/NNN-<name>.sh — the
+#                              zero-padded ordinal reflects its position among enabled
+#                              plugin hooks, preserving their order in PLUGINS.
+#                              docker/entrypoint.sh runs every hook, in lexical (i.e. NNN)
+#                              order, as a separate `sh` process, as root, after Docker
+#                              socket setup and before the gosu privilege drop. Because
+#                              entrypoint.sh runs under `set -e`, a hook that exits
+#                              non-zero aborts container startup (fail-closed) — hooks
+#                              that perform security-relevant setup (e.g. updating a
+#                              signature database) should fail loudly rather than warn
+#                              and continue.
+#
+#   <name>.compose.yml       — Compose fragment (optional)
+#                              Layered on top of the repo's compose.yml by
+#                              docker/compose-with-plugins.sh via a repeated `-f` flag, in
+#                              PLUGINS order, whenever this plugin is enabled. Use it for
+#                              plugin-specific volumes, environment, ports, etc. Compose
+#                              performs the merge and validation itself (`docker compose
+#                              config`); no merged file is generated or committed.
+#
+# Only <name>.dockerfile is required; the other four are optional.
 #
 # To activate: set PLUGINS=<name> in .env and run `make opencode-build-plugins`.
 #

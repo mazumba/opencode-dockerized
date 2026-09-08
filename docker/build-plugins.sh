@@ -7,6 +7,8 @@ PLUGINS_DIR="$SCRIPT_DIR/plugins"
 BASE="$SCRIPT_DIR/Dockerfile"
 OUT="$SCRIPT_DIR/Dockerfile.generated"
 MARKER="# {{plugins}}"
+HOOK_MARKER="# {{plugin-hooks}}"
+HOOK_DEST_DIR="/usr/local/lib/opencode/entrypoint.d"
 
 OPENCODE_CONFIG_DIR="$REPO_ROOT/.opencode/config"
 OPENCODE_JSONC_BASE="$OPENCODE_CONFIG_DIR/opencode.jsonc.base"
@@ -44,10 +46,36 @@ for plugin in "${plugin_list[@]}"; do
     dockerfile_content="${dockerfile_content}"$'\n'"$(cat "$snippet")"
 done
 
+# ── Phase 1b: Optional entrypoint startup hooks ──────────────────────────────
+# Enabled plugins may ship <name>.entrypoint.sh, run as root by
+# docker/entrypoint.sh before the privilege drop to gosu. Each hook is copied
+# into /usr/local/lib/opencode/entrypoint.d/ under a zero-padded ordinal name
+# (NNN-<name>.sh) so lexical directory ordering matches PLUGINS order,
+# regardless of how many digits the count needs. Only plugins that ship a
+# hook consume an ordinal; the sequence has no gaps.
+hook_content=""
+hook_ordinal=0
+for plugin in "${plugin_list[@]}"; do
+    hook_file="$PLUGINS_DIR/${plugin}/${plugin}.entrypoint.sh"
+    [ -f "$hook_file" ] || continue
+
+    if ! sh -n "$hook_file"; then
+        echo "Error: plugin '$plugin' entrypoint hook has invalid shell syntax: $hook_file" >&2
+        exit 1
+    fi
+
+    hook_ordinal=$((hook_ordinal + 1))
+    ordinal_padded="$(printf '%03d' "$hook_ordinal")"
+    dest="${HOOK_DEST_DIR}/${ordinal_padded}-${plugin}.sh"
+    hook_content="${hook_content}"$'\n'"COPY --chmod=0755 plugins/${plugin}/${plugin}.entrypoint.sh ${dest}"
+done
+
 generated_dockerfile=""
 while IFS= read -r line; do
     if [ "$line" = "$MARKER" ]; then
         generated_dockerfile="${generated_dockerfile}${dockerfile_content}"$'\n'
+    elif [ "$line" = "$HOOK_MARKER" ]; then
+        [ -n "$hook_content" ] && generated_dockerfile="${generated_dockerfile}${hook_content}"$'\n'
     else
         generated_dockerfile="${generated_dockerfile}${line}"$'\n'
     fi
@@ -157,4 +185,4 @@ printf '%s' "$merged_pkg" > "$PACKAGE_JSON"
 
 # ── Docker build ──────────────────────────────────────────────────────────────
 OPENCODE_DOCKERFILE=Dockerfile.generated \
-    docker compose -f "$REPO_ROOT/compose.yml" build --no-cache
+    "$SCRIPT_DIR/compose-with-plugins.sh" build --no-cache
