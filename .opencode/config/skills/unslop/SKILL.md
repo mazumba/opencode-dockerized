@@ -1,6 +1,6 @@
 ---
 name: unslop
-description: Cut AI tells from any writing. Must always apply.
+description: Writing prose for humans (docs, READMEs, PR bodies, commit messages, user-facing text). Cuts AI tells.
 ---
 
 # Unslop

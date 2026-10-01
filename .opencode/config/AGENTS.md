@@ -24,6 +24,14 @@ Follow professional software engineering standards:
   conventions
 - Do not silently hide errors when running CLI commands, always report them back to the user
 
+## Working Style
+
+- State assumptions before implementing. When a request has several readings, present them and ask; when something is unclear, name what is confusing.
+- Offer the simpler approach when one exists, and push back when warranted.
+- Make surgical changes: every changed line traces to the request. Match the surrounding style.
+- Remove orphans your change created; mention pre-existing dead code instead of deleting it.
+- Turn tasks into verifiable goals (a failing test that must pass, a check that must succeed). For multi-step work, state a short plan with a check per step.
+
 ## Code Quality
 
 Write production-quality code:
@@ -103,10 +111,13 @@ A change is complete when:
 - Default per-file note target: 1-2 lines (responsibility + relevance).
 - Prefer "top matches + rationale" over exhaustive listings by default.
 
-## Skill Loading Default
+## Response Style
 
-- Load `concise-precise` and `kaparthy-guidelines` by default for all user-facing responses.
-- Keep `concise-precise` active when loading other skills; treat it as the baseline response style.
+- Answer directly: lead with the result, then only the detail needed to act on it.
+- Use compact bullets (at most 4 unless the user asks for more) or numbered steps for multi-step instructions.
+- Spell out full warnings for risky, destructive, or security-relevant actions.
+- Keep this style until the user says "normal mode".
+- Load the `unslop` skill when writing prose for humans: docs, READMEs, PR bodies, commit messages.
 
 ## Container Networking
 

@@ -49,12 +49,14 @@ The profile is defensive-only and intended to complement `.opencode/skills/secur
 
 Skills are domain-knowledge folders loaded on demand. In this repo, default skills live under `.opencode/config/skills/<skill-name>/` and use this structure:
 
-### Default-loaded skills in this repo
+### Always-on rules
 
-Repository defaults come from `.opencode/config/AGENTS.md`:
+Response style and working rules live in `.opencode/config/AGENTS.md`, not in skills, so every agent gets them:
 
-- `concise-precise` is baseline for user-facing responses, inspired by [Julius Brussee's caveman](https://github.com/JuliusBrussee/caveman).
-- `karpathy-guidelines` layers on for non-trivial code changes, based on [Andrej Karpathy's code review guidelines](https://github.com/forrestchang/andrej-karpathy-skills).
+- **Response Style**, inspired by [Julius Brussee's caveman](https://github.com/JuliusBrussee/caveman).
+- **Working Style**, based on [Andrej Karpathy's guidelines](https://github.com/forrestchang/andrej-karpathy-skills).
+
+Upstream skills (mattpocock/skills, shadcn/improve) are pinned in `.opencode/config/skills-lock.json`.
 
 | File / Dir | Purpose |
 |---|---|

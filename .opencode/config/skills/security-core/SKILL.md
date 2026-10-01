@@ -1,6 +1,6 @@
 ---
 name: security-core
-description: "Use when establishing or reviewing a defensive security baseline across projects: threat model, auth/authz, validation, secrets, deps, logging, disclosure."
+description: "Security baseline review: threat model, authn/authz, input validation, secrets, dependencies, logging, disclosure. Use when establishing or auditing a project's defensive security controls."
 ---
 
 # Skill: security-core
@@ -8,20 +8,6 @@ description: "Use when establishing or reviewing a defensive security baseline a
 ## Overview
 
 Application security core covers baseline risk discovery and control verification across architecture, code, dependencies, runtime configuration, and operational response. It includes threat modeling, identity and access checks, input handling controls, secret management hygiene, and monitoring/disclosure readiness. The domain focuses on reducing exploitability and blast radius while improving detection and recovery quality.
-
-## File & Directory Map
-
-| Path | Purpose |
-|---|---|
-| `SKILL.md` | This reference file |
-| `GOTCHAS.md` | Known failure points and fixes |
-| `HISTORY.md` | Append-only change log |
-| `assets/` | Shared templates and output scaffolds |
-| `assets/finding-template.json` | Canonical finding output schema |
-| `assets/threat-model-template.md` | Lightweight threat model snapshot template |
-| `assets/disclosure-intake-template.md` | Coordinated disclosure intake template |
-| `assets/remediation-tracker-template.csv` | Remediation tracking starter sheet |
-| `scripts/` | Helper scripts and libraries the agent can run or compose (if any) |
 
 ## Key Facts
 

@@ -232,12 +232,12 @@ Both files are gitignored, so local customization does not affect others.
 
 ### Agent Defaults (`AGENTS.md`)
 
-This repo uses `.opencode/config/AGENTS.md` to define default skill-loading behavior.
+`.opencode/config/AGENTS.md` holds the global working rules every agent loads, including subagents:
 
-- `concise-precise` is loaded by default for user-facing responses.
-- `karpathy-guidelines` is loaded on top for non-trivial code changes.
+- **Working Style**: state assumptions, make surgical changes, turn tasks into verifiable goals.
+- **Response Style**: concise answers by default; say "normal mode" to switch off.
 
-This means response style stays concise by default, while coding workflow guidance is added when implementation tasks are complex.
+Both used to be the `karpathy-guidelines` and `concise-precise` skills; they live in `AGENTS.md` now so they apply without depending on skill loading.
 
 ### Permissions
 
