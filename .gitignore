@@ -16,6 +16,7 @@ compose.override.yml
 
 .idea
 .DS_Store
+*.pem
 
 .env
 docker/Dockerfile.generated

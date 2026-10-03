@@ -1,0 +1,98 @@
+#!/bin/sh
+# gh-app-token — mint/cache a GitHub App installation access token.
+#
+# Usage:
+#   gh-app-token          Print a valid installation access token (the API
+#                         issues these for 1 hour; cached here with a 5
+#                         minute safety margin before re-minting).
+#   gh-app-token --jwt    Print a short-lived (10 minute) App-level JWT
+#                         instead, used for App endpoints that are not
+#                         installation-scoped (e.g. /app, /app/installations).
+#                         Not cached — callers that need one call this once.
+#
+# Required environment:
+#   GH_APP_ID                 the App's numeric ID
+#   GH_APP_PRIVATE_KEY_PATH   path to the App's private key (.pem),
+#                             default /run/secrets/github-app.pem
+# Optional environment:
+#   GH_APP_INSTALLATION_ID    skip the installation.json lookup below
+#
+# GH_APP_INSTALLATION_ID, when not set in the environment, is read from
+# $CACHE_DIR/installation.json — written once at container startup by
+# github.entrypoint.sh, which also discovers it there when the App is
+# installed on exactly one account.
+set -eu
+
+KEY_PATH="${GH_APP_PRIVATE_KEY_PATH:-/run/secrets/github-app.pem}"
+CACHE_DIR="${HOME:-/home/opencode}/.cache/gh-app"
+CONFIG_FILE="$CACHE_DIR/installation.json"
+TOKEN_CACHE="$CACHE_DIR/token.json"
+
+fail() {
+    echo "gh-app-token: $*" >&2
+    exit 1
+}
+
+[ -n "${GH_APP_ID:-}" ] || fail "GH_APP_ID is not set"
+# A mistyped host path makes Docker create an empty directory at the mount
+# target instead of failing, so check for a regular file, not just existence.
+[ -f "$KEY_PATH" ] && [ -r "$KEY_PATH" ] \
+    || fail "private key not found at $KEY_PATH — check GH_APP_PRIVATE_KEY_PATH in .env (relative paths resolve from the repo root)"
+
+b64url() {
+    openssl base64 -A | tr '+/' '-_' | tr -d '='
+}
+
+make_jwt() {
+    now=$(date +%s)
+    iat=$((now - 60))
+    exp=$((now + 540))
+    header_b64=$(printf '{"alg":"RS256","typ":"JWT"}' | b64url)
+    payload_b64=$(printf '{"iat":%s,"exp":%s,"iss":"%s"}' "$iat" "$exp" "$GH_APP_ID" | b64url)
+    signature_b64=$(printf '%s.%s' "$header_b64" "$payload_b64" \
+        | openssl dgst -sha256 -sign "$KEY_PATH" \
+        | b64url)
+    printf '%s.%s.%s' "$header_b64" "$payload_b64" "$signature_b64"
+}
+
+if [ "${1:-}" = "--jwt" ]; then
+    make_jwt
+    exit 0
+fi
+
+mkdir -p "$CACHE_DIR"
+chmod 0700 "$CACHE_DIR"
+
+if [ -f "$TOKEN_CACHE" ]; then
+    now=$(date +%s)
+    expires_at=$(jq -r '.expires_at // 0' "$TOKEN_CACHE" 2>/dev/null || echo 0)
+    if [ "$((expires_at - now))" -gt 300 ]; then
+        jq -r '.token' "$TOKEN_CACHE"
+        exit 0
+    fi
+fi
+
+installation_id="${GH_APP_INSTALLATION_ID:-}"
+if [ -z "$installation_id" ] && [ -f "$CONFIG_FILE" ]; then
+    installation_id=$(jq -r '.installation_id // empty' "$CONFIG_FILE")
+fi
+[ -n "$installation_id" ] || fail "no installation id available (set GH_APP_INSTALLATION_ID in .env, or check that the container startup hook ran successfully)"
+
+jwt=$(make_jwt)
+response=$(curl -fsS -X POST \
+    -H "Authorization: Bearer $jwt" \
+    -H "Accept: application/vnd.github+json" \
+    "https://api.github.com/app/installations/${installation_id}/access_tokens") \
+    || fail "could not mint installation token for installation $installation_id (check GH_APP_ID, GH_APP_INSTALLATION_ID, and that the App is still installed)"
+
+token=$(printf '%s' "$response" | jq -r '.token // empty')
+expires_at_iso=$(printf '%s' "$response" | jq -r '.expires_at // empty')
+[ -n "$token" ] || fail "unexpected response from GitHub: $response"
+
+expires_at=$(date -d "$expires_at_iso" +%s)
+
+printf '{"token":"%s","expires_at":%s}' "$token" "$expires_at" > "$TOKEN_CACHE.tmp"
+chmod 0600 "$TOKEN_CACHE.tmp"
+mv "$TOKEN_CACHE.tmp" "$TOKEN_CACHE"
+
+printf '%s' "$token"

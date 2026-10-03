@@ -1,0 +1,12 @@
+# Plugin: github — Compose fragment
+# Mounts the GitHub App private key read-only and passes through the App
+# identifiers that gh-app-token / git-credential-github-app need. Required
+# when the `github` plugin is selected via PLUGINS — see README "GitHub
+# plugin" for how to create and install the App and set these in .env.
+services:
+  opencode:
+    volumes:
+      - ${GH_APP_PRIVATE_KEY_PATH:?GH_APP_PRIVATE_KEY_PATH is not set. Set it in .env (see README "GitHub plugin")}:/run/secrets/github-app.pem:ro
+    environment:
+      GH_APP_ID: ${GH_APP_ID:?GH_APP_ID is not set. Set it in .env (see README "GitHub plugin")}
+      GH_APP_INSTALLATION_ID: ${GH_APP_INSTALLATION_ID:-}

@@ -17,7 +17,7 @@ make opencode-build
 
 # 2) Start container
 make opencode-run
-# -> http://localhost:4096
+# -> http://localhost:4096 (user: opencode, password: OPENCODE_SERVER_PASSWORD)
 
 # 3) Stop and remove container
 make opencode-down
@@ -49,6 +49,16 @@ services:
 cp .env.dist .env
 ```
 
+Set a password for the web UI and server API in `.env`. The container refuses to start without one:
+
+```sh
+OPENCODE_SERVER_PASSWORD=<output of: openssl rand -base64 24>
+```
+
+The browser asks for it on first visit. The username is `opencode`.
+
+The port is published on `127.0.0.1` only, so other machines on your network cannot reach it. The password also blocks requests that web pages in your own browser send to `localhost:4096`.
+
 The container runs as a non-root user matching your host `UID`/`GID` (detected automatically by the `Makefile`).
 
 To pin a specific OpenCode version, set `OPENCODE_VERSION` in `.env`:
@@ -70,6 +80,7 @@ Available plugins:
 | `excel`   | `openpyxl` for reading and writing `.xlsx` files |
 | `browser` | Playwright Chromium (headless, MCP-controlled) — see [Browser MCP](#browser-mcp-playwright) below |
 | `image`   | `vips` (re-encode/strip images), `exiftool` (inspect metadata), `clamav`/`clamav-freshclam` (scan for malware) — see [Image plugin](#image-plugin) below |
+| `github`  | GitHub CLI (`gh`) and git, authenticated as a GitHub App — see [GitHub plugin](#github-plugin) below |
 
 To enable plugins, set `PLUGINS` in your `.env` file (comma-separated):
 
@@ -164,6 +175,51 @@ The virus definitions in `/var/lib/clamav` persist across container recreations 
 **`clamscan` exit codes:** `0` = clean, `1` = virus/malware detected, `2` = error (e.g. file access, corrupted definitions). Treat a non-zero exit as a signal to stop and investigate manually — do not script automatic deletion of flagged files.
 
 **Important caveat:** ClamAV scanning supplements the vips re-encode step; it does not prove a file is safe or uncompromised. Signature-based scanning only catches known threats, and image parsers can have undiscovered vulnerabilities. Re-encoding through `vips` (which discards the original byte stream and rebuilds pixel data) is the primary defense; ClamAV is a secondary check, not a guarantee.
+
+### GitHub plugin
+
+The `github` plugin installs `gh` and configures git to authenticate as a **GitHub App** installation rather than a personal account — commits, pushes, issues, and PRs are all attributed to the App's bot identity (`<slug>`), not to you.
+
+**1. Create the App:** [github.com/settings/apps](https://github.com/settings/apps) → New GitHub App. Uncheck "Active" under Webhook. Set repository permissions:
+
+| Permission | Level |
+|---|---|
+| Contents | Read & write |
+| Issues | Read & write |
+| Pull requests | Read & write |
+| Everything else | No access |
+
+**2. Generate a private key** on the App's page — downloads a `.pem` file. Note the **App ID** shown at the top of the page.
+
+**3. Install the App** via "Install App" in the sidebar, choosing which account/repos it can access. Note the **Installation ID** — the number in the URL after installing (`/settings/installations/<id>`).
+
+**4. Store the private key outside the repo** — e.g. `~/.config/opencode-secrets/github-app.pem`. Never place it under this project's directory, even gitignored: editors, search indexes, and backup tools don't respect `.gitignore`.
+
+**5. Set in `.env`:**
+
+```sh
+# .env
+PLUGINS=github
+GH_APP_ID=123456
+GH_APP_PRIVATE_KEY_PATH=/home/you/.config/opencode-secrets/github-app.pem
+# Only needed if the App is installed on more than one account:
+#GH_APP_INSTALLATION_ID=
+```
+
+`GH_APP_PRIVATE_KEY_PATH` accepts absolute paths, `~/...`, and relative paths (resolved from the repo root, where `compose.yml` lives). If the path doesn't exist, Docker mounts an empty directory instead; the startup hook detects this and aborts with a clear error.
+
+```sh
+make opencode-build-plugins
+make opencode-run
+```
+
+**Startup behavior:** every container start runs `docker/plugins/github/github.entrypoint.sh` as root, before the privilege drop to the `opencode` user. It signs a JWT with the mounted key, looks up the App's slug and (unless `GH_APP_INSTALLATION_ID` is set) its single installation, resolves the bot user's numeric id, verifies an installation access token can actually be minted, and configures git's credential helper and `user.name`/`user.email` for the `opencode` user. Any failure here — bad key, wrong App ID, App installed on more than one account without `GH_APP_INSTALLATION_ID` set — aborts container startup (fail-closed) rather than falling back to unauthenticated git.
+
+**How auth stays fresh:** installation access tokens expire after 1 hour. `gh-app-token` (`/usr/local/lib/opencode/github/gh-app-token`) mints one on demand and caches it until ~5 minutes before expiry. The `gh` wrapper at `/usr/local/bin/gh` calls it before every invocation; the git credential helper calls it on every `get`. You don't need to do anything — just don't `git config --global credential.helper` or `user.email` yourself, as that would override what the hook set.
+
+**Branch protection matters more than usual here.** `Contents: write` lets the bot force-push to or delete any branch, and merge its own PRs, unless you restrict it. Add a branch ruleset on `main` (Settings → Rules → Rulesets) requiring a PR with at least one approval and blocking force-push/deletion — the bot can't approve its own PR, so it can't merge it either. On GitHub Free this is only enforced on public repos; private repos need GitHub Pro (or Team, for organizations) for rulesets to apply.
+
+**Revoking access:** uninstall the App, or delete/rotate the private key — either stops `gh-app-token` from minting new tokens within the hour.
 
 ### Adding a new plugin
 

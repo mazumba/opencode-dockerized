@@ -1,0 +1,12 @@
+#!/bin/sh
+# gh-wrapper — installed as /usr/local/bin/gh, ahead of /usr/bin/gh on PATH.
+#
+# `gh` reads GH_TOKEN once at process start, so a long-lived shell session
+# can't just export it once — each invocation needs a current token. This
+# wrapper mints/refreshes it via gh-app-token and execs the real binary.
+set -eu
+
+GH_TOKEN="$(/usr/local/lib/opencode/github/gh-app-token)"
+export GH_TOKEN
+
+exec /usr/bin/gh "$@"

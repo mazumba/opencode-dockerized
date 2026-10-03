@@ -7,14 +7,17 @@ services:
       args:
         USER_UID: ${USER_UID:?USER_UID is not set. Run via make commands}
         USER_GID: ${USER_GID:?USER_GID is not set. Run via make commands}
+        OPENCODE_VERSION: ${OPENCODE_VERSION:-}
+        OH_MY_OPENCODE_SLIM_VERSION: ${OH_MY_OPENCODE_SLIM_VERSION:-}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./.opencode/config:/home/opencode/.config/opencode
       - opencode_share:/home/opencode/.local/share/opencode
     environment:
       OPENCODE_DISABLE_AUTOUPDATE: true
+      OPENCODE_SERVER_PASSWORD: ${OPENCODE_SERVER_PASSWORD:?OPENCODE_SERVER_PASSWORD is not set. Set it in .env}
     ports:
-      - "4096:4096"
+      - "127.0.0.1:4096:4096"
     extra_hosts:
       - "host.docker.internal:host-gateway"
 

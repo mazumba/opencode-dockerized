@@ -20,4 +20,4 @@ opencode-run: opencode-down ## run opencode container
 	@echo '   █  █ █  █ █▀▀▀ █  █ █    █  █ █  █ █▀▀▀'
 	@echo '   ▀▀▀▀ █▀▀▀ ▀▀▀▀ ▀  ▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀'
 	@echo '                                          '
-	@echo '   Local access:     http://localhost:4096'
+	@echo '   Local access:     http://localhost:4096 (user: opencode, password: OPENCODE_SERVER_PASSWORD from .env)'
