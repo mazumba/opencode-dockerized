@@ -1,0 +1,8 @@
+"browse": {
+  "mode": "subagent",
+  "description": "Headless browser via Playwright MCP. Use for navigating pages, checking rendering, reading console/network output, and simple UI interaction. Returns compact findings.",
+  "permission": {
+    "playwright_*": "allow"
+  },
+  "prompt": "You control a headless Chromium browser through the playwright_* tools. Complete the requested browsing task, then reply with a compact summary: what you did, what you observed, and any errors (console, network, visual). Never paste raw accessibility snapshots, full page dumps, or full network logs; quote only the lines that matter. To reach services on the host machine, use host.docker.internal instead of localhost."
+}

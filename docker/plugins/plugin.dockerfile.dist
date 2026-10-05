@@ -1,7 +1,7 @@
 # Plugin: <name>
 # <Short description of what this plugin adds>
 #
-# Plugin convention: each plugin lives in docker/plugins/<name>/ and may carry up to five files:
+# Plugin convention: each plugin lives in docker/plugins/<name>/ and may carry up to six files:
 #
 #   <name>.dockerfile        — system/apt dependencies (required)
 #                              Injected into Dockerfile.generated at the "# {{plugins}}" marker.
@@ -13,6 +13,15 @@
 #   <name>.opencode.jsonc    — MCP config fragment (optional)
 #                              Injected into .opencode/config/opencode.jsonc at the
 #                              "// {{mcp-plugins}}" marker inside the "mcp" block.
+#
+#   <name>.agent.jsonc       — opencode agent fragment (optional)
+#                              Defines an agent that exclusively owns this plugin's MCP
+#                              tools. Injected into .opencode/config/opencode.jsonc at the
+#                              "// {{agent-plugins}}" marker inside the "agent" block. If
+#                              the plugin also ships an MCP fragment (<name>.opencode.jsonc),
+#                              that server's "<server>_*" tools are denied for all agents at
+#                              the "// {{permission-plugins}}" marker, so only this agent —
+#                              via its own "permission" block — can use them.
 #
 #   <name>.entrypoint.sh     — startup hook (optional)
 #                              A POSIX `sh` script. build-plugins.sh validates it with
@@ -38,7 +47,7 @@
 #                              performs the merge and validation itself (`docker compose
 #                              config`); no merged file is generated or committed.
 #
-# Only <name>.dockerfile is required; the other four are optional.
+# Only <name>.dockerfile is required; the other five are optional.
 #
 # To activate: set PLUGINS=<name> in .env and run `make opencode-build-plugins`.
 #

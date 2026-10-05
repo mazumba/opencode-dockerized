@@ -4,6 +4,13 @@
   "share": "disabled",
   "permission": {
     "bash": "ask"
+    // Plugin-owned MCP tools are denied for all agents here except the
+    // plugin's own agent; keep this last — permission rules are last-match-wins.
+    // {{permission-plugins}}
+  },
+  "agent": {
+    // injection marker for plugin agent fragments; see docker/plugins/plugin.dockerfile.dist for details
+    // {{agent-plugins}}
   },
   "mcp": {
     // injection marker for MCP plugin configuration fragments; see docker/plugins/plugin.dockerfile.dist for details

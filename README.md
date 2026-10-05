@@ -114,13 +114,9 @@ make opencode-run
 
 - **Headless by default.** The browser runs without a visible UI (`PLAYWRIGHT_HEADLESS=true`).
 - **Enabled when active.** The MCP entry is `enabled: true` when the browser plugin is active — activating the plugin is the opt-in.
-- **Tool access is user-configurable.** By default all agents can use `playwright_*` tools. Restrict or scope access via `opencode.jsonc` if needed.
-- **Configured agents need explicit tool access.** If an agent in `opencode.jsonc` has a `tools` block, `playwright_*` tools are not granted automatically — you must add them:
-  ```jsonc
-  "tools": {
-    "playwright_*": true
-  }
-  ```
+- **Only the `browse` agent gets the tools.** The plugin ships `browser.agent.jsonc`, which defines a `browse` subagent with `"playwright_*": "allow"`. The build also adds `"playwright_*": "deny"` to the global `permission` block, so no other agent loads the Playwright tool definitions or the large page snapshots they return. Other agents hand browser work to `browse`, which replies with a short summary.
+- **Requires the markers.** Your `opencode.jsonc.base` needs the `// {{agent-plugins}}` and `// {{permission-plugins}}` markers (see `opencode.jsonc.base.dist`). If one is missing, the build stops with an error. Remove any hand-written `browse` agent from your base file; the plugin provides it.
+- **oh-my-opencode-slim orchestrator.** Slim grants MCP tools per agent from its `mcps` list, which overrides the global deny. Add `"!playwright"` to the orchestrator's `mcps` (already set in `oh-my-opencode-slim.json.dist`).
 - **Non-persistent state.** No browser profile or cache is retained across container restarts (non-persistent by design).
 - **Standard outbound network.** The container uses the same outbound network as the base image; no extra network restrictions are added for browser traffic.
 - **Reaching host services.** To access services running on the host machine from within the browser (e.g. a local dev server), use `host.docker.internal` instead of `localhost`.
@@ -223,13 +219,14 @@ make opencode-run
 
 ### Adding a new plugin
 
-Each plugin lives in its own subdirectory `docker/plugins/<name>/` and may include up to five files:
+Each plugin lives in its own subdirectory `docker/plugins/<name>/` and may include up to six files:
 
 | File | Purpose | Required |
 |---|---|---|
 | `<name>.dockerfile` | apt/system dependencies injected into the image | Yes |
 | `<name>.package.json` | npm deps merged into `.opencode/config/package.json` at build time | No |
 | `<name>.opencode.jsonc` | MCP config fragment injected into `opencode.jsonc` at build time | No |
+| `<name>.agent.jsonc` | agent fragment injected at `// {{agent-plugins}}`. If the plugin also ships an MCP fragment, that server's `<server>_*` tools are denied for all other agents at `// {{permission-plugins}}` (see [Browser MCP](#browser-mcp-playwright)) | No |
 | `<name>.entrypoint.sh` | startup hook run as root before the privilege drop (see [Image plugin](#image-plugin) for an example) | No |
 | `<name>.compose.yml` | Compose fragment layered onto `compose.yml` via `docker/compose-with-plugins.sh` | No |
 
@@ -285,6 +282,21 @@ If you are not using plugins, you can create `opencode.jsonc` directly:
 ```
 
 Both files are gitignored, so local customization does not affect others.
+
+### oh-my-opencode-slim (`oh-my-opencode-slim.json`)
+
+The committed template is `.opencode/config/oh-my-opencode-slim.json.dist`. Copy it to get started:
+
+```sh
+cp .opencode/config/oh-my-opencode-slim.json.dist .opencode/config/oh-my-opencode-slim.json
+```
+
+The template differs from slim's defaults in two ways, both to keep tool definitions out of the context:
+
+- **Marketplace tools disabled.** `"disabled_tools": ["marketplace_inspect", "marketplace_manage"]` stops slim from registering its package-management tools. Remove the entry to install marketplace packages through the agent again; restart OpenCode afterwards. A short marketplace section remains in slim's built-in orchestrator prompt.
+- **No Playwright in the orchestrator.** `"!playwright"` in the orchestrator's `mcps` leaves browser work to the `browse` agent (see [Browser MCP](#browser-mcp-playwright)).
+
+`oh-my-opencode-slim.json` is gitignored.
 
 ### Agent Defaults (`AGENTS.md`)
 

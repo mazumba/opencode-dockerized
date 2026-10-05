@@ -16,6 +16,8 @@ OPENCODE_JSONC_DIST="$OPENCODE_CONFIG_DIR/opencode.jsonc.base.dist"
 OPENCODE_JSONC_OUT="$OPENCODE_CONFIG_DIR/opencode.jsonc"
 PACKAGE_JSON="$OPENCODE_CONFIG_DIR/package.json"
 MCP_MARKER="// {{mcp-plugins}}"
+AGENT_MARKER="// {{agent-plugins}}"
+PERMISSION_MARKER="// {{permission-plugins}}"
 
 DRY_RUN=false
 for arg in "$@"; do
@@ -109,13 +111,18 @@ print(json.dumps(base, indent=2))
 done
 
 # ── Phase 3: opencode.jsonc config injection ──────────────────────────────────
-# Check whether any active plugin has an MCP config fragment
-has_mcp_plugin=false
+# Check whether any active plugin ships a config fragment (MCP and/or agent).
+# Either kind requires the opencode.jsonc.base file to exist, so both trigger
+# the .dist bootstrap below.
+has_config_plugin=false
 for plugin in "${plugin_list[@]}"; do
-    [ -f "$PLUGINS_DIR/${plugin}/${plugin}.opencode.jsonc" ] && has_mcp_plugin=true && break
+    if [ -f "$PLUGINS_DIR/${plugin}/${plugin}.opencode.jsonc" ] || [ -f "$PLUGINS_DIR/${plugin}/${plugin}.agent.jsonc" ]; then
+        has_config_plugin=true
+        break
+    fi
 done
 
-if $has_mcp_plugin; then
+if $has_config_plugin; then
     # Auto-copy .dist template if user has not created their own .base yet
     if [ ! -f "$OPENCODE_JSONC_BASE" ]; then
         if [ ! -f "$OPENCODE_JSONC_DIST" ]; then
@@ -128,39 +135,150 @@ if $has_mcp_plugin; then
 fi
 
 if [ ! -f "$OPENCODE_JSONC_BASE" ]; then
-    # No base file and no MCP plugins — skip config phase entirely
+    # No base file and no config plugins — skip config phase entirely
     generated_jsonc=""
 else
 
+# Extracts the top-level key of an <name>.opencode.jsonc MCP fragment,
+# sanitized the same way opencode normalizes server names ([^a-zA-Z0-9_-] -> "_").
+extract_mcp_server_name() {
+    python3 -c "
+import json, re, sys
+with open(sys.argv[1]) as f:
+    content = f.read()
+data = json.loads('{' + content + '}')
+key = next(iter(data))
+print(re.sub(r'[^a-zA-Z0-9_-]', '_', key))
+" "$1"
+}
+
+# A plugin may ship <name>.opencode.jsonc (MCP server), <name>.agent.jsonc (an
+# agent that exclusively owns that server's tools), or both. When a plugin
+# ships both, its MCP server's tools are denied for every other agent via the
+# permission-plugins marker, so only the plugin's own agent (through its
+# permission.allow) can use them.
 mcp_fragments=""
+mcp_needed_by=""
+agent_fragments=""
+agent_needed_by=""
+permission_fragments=""
+permission_needed_by=""
+
 for plugin in "${plugin_list[@]}"; do
-    frag_file="$PLUGINS_DIR/${plugin}/${plugin}.opencode.jsonc"
-    [ -f "$frag_file" ] || continue
-    content="$(cat "$frag_file")"
-    if [ -z "$mcp_fragments" ]; then
-        mcp_fragments="$content"
-    else
-        mcp_fragments="${mcp_fragments},"$'\n'"$content"
+    mcp_file="$PLUGINS_DIR/${plugin}/${plugin}.opencode.jsonc"
+    agent_file="$PLUGINS_DIR/${plugin}/${plugin}.agent.jsonc"
+
+    if [ -f "$mcp_file" ]; then
+        content="$(cat "$mcp_file")"
+        if [ -z "$mcp_fragments" ]; then
+            mcp_fragments="$content"
+        else
+            mcp_fragments="${mcp_fragments},"$'\n'"$content"
+        fi
+        [ -z "$mcp_needed_by" ] && mcp_needed_by="$plugin"
+    fi
+
+    if [ -f "$agent_file" ]; then
+        content="$(cat "$agent_file")"
+        if [ -z "$agent_fragments" ]; then
+            agent_fragments="$content"
+        else
+            agent_fragments="${agent_fragments},"$'\n'"$content"
+        fi
+        [ -z "$agent_needed_by" ] && agent_needed_by="$plugin"
+    fi
+
+    if [ -f "$mcp_file" ] && [ -f "$agent_file" ]; then
+        server_name="$(extract_mcp_server_name "$mcp_file")"
+        if [ -z "$server_name" ]; then
+            echo "Error: could not determine MCP server name from $mcp_file" >&2
+            exit 1
+        fi
+        deny_entry="\"${server_name}_*\": \"deny\""
+        if [ -z "$permission_fragments" ]; then
+            permission_fragments="$deny_entry"
+        else
+            permission_fragments="${permission_fragments},"$'\n'"$deny_entry"
+        fi
+        [ -z "$permission_needed_by" ] && permission_needed_by="$plugin"
     fi
 done
 
-generated_jsonc=""
+# Fail loudly if a plugin needs a marker the base file does not provide.
+if [ -n "$mcp_fragments" ] && ! grep -qF "$MCP_MARKER" "$OPENCODE_JSONC_BASE"; then
+    echo "Error: $OPENCODE_JSONC_BASE is missing marker '$MCP_MARKER' required by plugin '$mcp_needed_by'" >&2
+    exit 1
+fi
+if [ -n "$agent_fragments" ] && ! grep -qF "$AGENT_MARKER" "$OPENCODE_JSONC_BASE"; then
+    echo "Error: $OPENCODE_JSONC_BASE is missing marker '$AGENT_MARKER' required by plugin '$agent_needed_by'" >&2
+    exit 1
+fi
+if [ -n "$permission_fragments" ] && ! grep -qF "$PERMISSION_MARKER" "$OPENCODE_JSONC_BASE"; then
+    echo "Error: $OPENCODE_JSONC_BASE is missing marker '$PERMISSION_MARKER' required by plugin '$permission_needed_by'" >&2
+    exit 1
+fi
+
+# Appends a trailing comma to the last non-blank, non-comment-only line
+# already in out_lines, unless it already ends with a comma or an opening
+# bracket/brace. Needed because injected fragments are the last entries in
+# their JSONC block, and the previously-last entry had no trailing comma.
+add_trailing_comma() {
+    local i line trimmed rtrimmed last_char
+    for ((i = ${#out_lines[@]} - 1; i >= 0; i--)); do
+        line="${out_lines[$i]}"
+        trimmed="${line#"${line%%[![:space:]]*}"}"
+        [ -z "$trimmed" ] && continue
+        [[ "$trimmed" == //* ]] && continue
+        rtrimmed="${line%"${line##*[![:space:]]}"}"
+        last_char="${rtrimmed: -1}"
+        case "$last_char" in
+            ','|'{'|'[') ;;
+            *) out_lines[$i]="${rtrimmed}," ;;
+        esac
+        return
+    done
+}
+
+out_lines=()
 while IFS= read -r line; do
-    if [[ "$line" == *"$MCP_MARKER"* ]]; then
-        if [ -n "$mcp_fragments" ]; then
-            # Indent each fragment line to match the marker indentation
-            indent="${line%%\/\/*}"
-            indented_frag=""
-            while IFS= read -r frag_line; do
-                indented_frag="${indented_frag}${indent}${frag_line}"$'\n'
-            done <<< "$mcp_fragments"
-            generated_jsonc="${generated_jsonc}${indented_frag}"
-        fi
-        # Skip the marker line itself
-    else
-        generated_jsonc="${generated_jsonc}${line}"$'\n'
-    fi
+    case "$line" in
+        *"$MCP_MARKER"*)
+            if [ -n "$mcp_fragments" ]; then
+                add_trailing_comma
+                indent="${line%%\/\/*}"
+                while IFS= read -r frag_line; do
+                    out_lines+=("${indent}${frag_line}")
+                done <<< "$mcp_fragments"
+            fi
+            ;;
+        *"$AGENT_MARKER"*)
+            if [ -n "$agent_fragments" ]; then
+                add_trailing_comma
+                indent="${line%%\/\/*}"
+                while IFS= read -r frag_line; do
+                    out_lines+=("${indent}${frag_line}")
+                done <<< "$agent_fragments"
+            fi
+            ;;
+        *"$PERMISSION_MARKER"*)
+            if [ -n "$permission_fragments" ]; then
+                add_trailing_comma
+                indent="${line%%\/\/*}"
+                while IFS= read -r frag_line; do
+                    out_lines+=("${indent}${frag_line}")
+                done <<< "$permission_fragments"
+            fi
+            ;;
+        *)
+            out_lines+=("$line")
+            ;;
+    esac
 done < "$OPENCODE_JSONC_BASE"
+
+generated_jsonc=""
+for line in "${out_lines[@]}"; do
+    generated_jsonc="${generated_jsonc}${line}"$'\n'
+done
 fi # end: has base file check
 
 # ── Output / dry-run ──────────────────────────────────────────────────────────

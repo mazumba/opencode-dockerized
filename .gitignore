@@ -6,6 +6,7 @@
 !.opencode/config/skills-lock.json
 !.opencode/config/tools
 !.opencode/config/opencode.jsonc.base.dist
+!.opencode/config/oh-my-opencode-slim.json.dist
 
 .opencode/share/*
 !.opencode/share/.gitkeep

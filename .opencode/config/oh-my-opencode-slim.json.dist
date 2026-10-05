@@ -1,0 +1,60 @@
+{
+  "$schema": "https://unpkg.com/oh-my-opencode-slim@latest/oh-my-opencode-slim.schema.json",
+  "preset": "copilot",
+  "disabled_tools": [
+    "marketplace_inspect",
+    "marketplace_manage"
+  ],
+  "presets": {
+    "copilot": {
+      "orchestrator": {
+        "model": "github-copilot/claude-opus-5.5",
+        "variant": "medium",
+        "skills": [
+          "*"
+        ],
+        "mcps": [
+          "*",
+          "!context7",
+          "!playwright"
+        ]
+      },
+      "oracle": {
+        "model": "github-copilot/claude-opus-5.5",
+        "variant": "high",
+        "skills": [
+          "simplify"
+        ],
+        "mcps": []
+      },
+      "librarian": {
+        "model": "github-copilot/claude-opus-5.5",
+        "variant": "low",
+        "skills": [],
+        "mcps": [
+          "websearch",
+          "context7",
+          "gh_grep"
+        ]
+      },
+      "explorer": {
+        "model": "github-copilot/claude-sonnet-5.5",
+        "variant": "low",
+        "skills": [],
+        "mcps": []
+      },
+      "designer": {
+        "model": "github-copilot/claude-sonnet-5.5",
+        "variant": "medium",
+        "skills": [],
+        "mcps": []
+      },
+      "fixer": {
+        "model": "github-copilot/claude-sonnet-5.5",
+        "variant": "medium",
+        "skills": [],
+        "mcps": []
+      }
+    }
+  }
+}
