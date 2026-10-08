@@ -209,7 +209,13 @@ make opencode-build-plugins
 make opencode-run
 ```
 
-**Startup behavior:** every container start runs `docker/plugins/github/github.entrypoint.sh` as root, before the privilege drop to the `opencode` user. It signs a JWT with the mounted key, looks up the App's slug and (unless `GH_APP_INSTALLATION_ID` is set) its single installation, resolves the bot user's numeric id, verifies an installation access token can actually be minted, and configures git's credential helper and `user.name`/`user.email` for the `opencode` user. Any failure here — bad key, wrong App ID, App installed on more than one account without `GH_APP_INSTALLATION_ID` set — aborts container startup (fail-closed) rather than falling back to unauthenticated git.
+**Startup behavior:** every container start runs `docker/plugins/github/github.entrypoint.sh` as root, before the privilege drop to the `opencode` user. It signs a JWT with the mounted key, looks up the App's slug and (unless `GH_APP_INSTALLATION_ID` is set) its single installation, mints an installation access token, uses it to resolve the bot user's numeric id, and configures git's credential helper and `user.name`/`user.email` for the `opencode` user. Any failure here — bad key, wrong App ID, App installed on more than one account without `GH_APP_INSTALLATION_ID` set — aborts container startup (fail-closed) rather than falling back to unauthenticated git. Errors name the failed step and include GitHub's HTTP status and message.
+
+**Hidden bot account (e.g. enterprise orgs):** the commit email needs the numeric user id of the App's bot account, `<slug>[bot]`. This is not the App ID or the Client ID. Some orgs hide that account, and startup then fails at "bot lookup". Find the id while logged in as an org member, with `gh api "/users/<slug>%5Bbot%5D" --jq .id`, or read `user.id` from any issue, comment or PR the bot created. Then set it in `.env`:
+
+```sh
+GH_APP_BOT_USER_ID=123456789
+```
 
 **How auth stays fresh:** installation access tokens expire after 1 hour. `gh-app-token` (`/usr/local/lib/opencode/github/gh-app-token`) mints one on demand and caches it until ~5 minutes before expiry. The `gh` wrapper at `/usr/local/bin/gh` calls it before every invocation; the git credential helper calls it on every `get`. You don't need to do anything — just don't `git config --global credential.helper` or `user.email` yourself, as that would override what the hook set.
 
