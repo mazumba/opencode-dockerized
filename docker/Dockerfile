@@ -34,11 +34,18 @@ RUN if ! getent group ${USER_GID} > /dev/null 2>&1; then \
     && useradd -m -u ${USER_UID} -g ${USER_GID} -s /bin/bash opencode
 
 USER opencode
-RUN if [ -n "${OPENCODE_VERSION}" ]; then \
-        curl -fsSL https://opencode.ai/install | bash -s -- --version "${OPENCODE_VERSION}"; \
-    else \
-        curl -fsSL https://opencode.ai/install | bash -s; \
-    fi \
+# Resolve "latest" ourselves via the github.com release redirect: the
+# installer's own lookup uses the GitHub API, which is rate-limited to 60
+# anonymous requests per hour per IP and then fails with a vague error.
+RUN set -eu; \
+    version="${OPENCODE_VERSION}"; \
+    if [ -z "$version" ]; then \
+        version=$(curl -fsSI -o /dev/null -w '%{redirect_url}' \
+            https://github.com/anomalyco/opencode/releases/latest | sed -n 's#.*/tag/v##p'); \
+        [ -n "$version" ] || { echo "could not resolve latest opencode version; set OPENCODE_VERSION in .env" >&2; exit 1; }; \
+    fi; \
+    echo "installing opencode $version"; \
+    curl -fsSL https://opencode.ai/install | bash -s -- --version "$version" --no-modify-path \
     && mkdir -p /home/opencode/.local/state/opencode \
     && mkdir -p /home/opencode/.local/share/opencode \
     && mkdir -p /home/opencode/.config/opencode
