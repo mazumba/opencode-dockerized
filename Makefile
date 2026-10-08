@@ -21,3 +21,19 @@ opencode-run: opencode-down ## run opencode container
 	@echo '   ▀▀▀▀ █▀▀▀ ▀▀▀▀ ▀  ▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀'
 	@echo '                                          '
 	@echo '   Local access:     http://localhost:4096 (user: opencode, password: OPENCODE_SERVER_PASSWORD from .env)'
+
+kanban-poller-run: ## start the kanban poller (needs the kanban plugin in PLUGINS)
+	docker/compose-with-plugins.sh --profile kanban-poller up -d kanban-poller
+
+kanban-poller-logs: ## follow the kanban poller logs
+	docker/compose-with-plugins.sh --profile kanban-poller logs -f kanban-poller
+
+kanban-poller-down: ## stop and remove the kanban poller
+	docker/compose-with-plugins.sh --profile kanban-poller stop kanban-poller
+	docker/compose-with-plugins.sh --profile kanban-poller rm -f kanban-poller
+
+kanban-poller-once: ## run a single kanban poller pass, performing real actions
+	docker/compose-with-plugins.sh --profile kanban-poller run --rm kanban-poller --once
+
+kanban-poller-dry-run: ## run a single kanban poller pass without writes or agent runs
+	docker/compose-with-plugins.sh --profile kanban-poller run --rm kanban-poller --once --dry-run

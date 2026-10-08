@@ -1,0 +1,30 @@
+# Plugin: kanban — Compose fragment
+# Tags the opencode image so the poller service can reuse it, and defines the
+# optional kanban-poller service (profile "kanban-poller"; start it with
+# `make kanban-poller-run`). The poller talks to the opencode container and to
+# Linear only: no volumes, no Docker socket, no ports. Its entrypoint bypasses
+# the image entrypoint and plugin hooks, so no GitHub credentials are needed.
+services:
+  opencode:
+    image: opencode-dockerized-opencode:local
+
+  kanban-poller:
+    image: opencode-dockerized-opencode:local
+    pull_policy: never
+    profiles: ["kanban-poller"]
+    user: opencode
+    entrypoint: ["/home/opencode/.bun/bin/bun", "/usr/local/lib/opencode/kanban-poller/poller.ts"]
+    command: []
+    restart: unless-stopped
+    depends_on:
+      - opencode
+    environment:
+      LINEAR_API_KEY: ${LINEAR_API_KEY:?LINEAR_API_KEY is not set. Set it in .env (see README "Linear plugin")}
+      OPENCODE_SERVER_PASSWORD: ${OPENCODE_SERVER_PASSWORD:?OPENCODE_SERVER_PASSWORD is not set. Set it in .env}
+      KANBAN_TEAM: ${KANBAN_TEAM:-DEY}
+      KANBAN_POLL_INTERVAL: ${KANBAN_POLL_INTERVAL:-60}
+      KANBAN_OPENCODE_URL: ${KANBAN_OPENCODE_URL:-http://opencode:4096}
+      KANBAN_TIMEOUT_WORK: ${KANBAN_TIMEOUT_WORK:-60}
+      KANBAN_TIMEOUT_REVIEW: ${KANBAN_TIMEOUT_REVIEW:-20}
+      KANBAN_TIMEOUT_INVESTIGATE: ${KANBAN_TIMEOUT_INVESTIGATE:-20}
+      KANBAN_REVIEW_RETRY: ${KANBAN_REVIEW_RETRY:-10}

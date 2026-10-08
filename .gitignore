@@ -2,6 +2,14 @@
 !.opencode/config/AGENTS.md
 !.opencode/config/agents
 !.opencode/config/commands
+.opencode/config/commands/*
+!.opencode/config/commands/implement.md
+!.opencode/config/commands/patch-cve.md
+!.opencode/config/commands/plan.md
+!.opencode/config/commands/research.md
+!.opencode/config/commands/security-profile.md
+!.opencode/config/commands/skill.md
+!.opencode/config/commands/update-plan.md
 !.opencode/config/skills
 !.opencode/config/skills-lock.json
 !.opencode/config/tools
