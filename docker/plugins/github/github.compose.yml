@@ -10,3 +10,4 @@ services:
     environment:
       GH_APP_ID: ${GH_APP_ID:?GH_APP_ID is not set. Set it in .env (see README "GitHub plugin")}
       GH_APP_INSTALLATION_ID: ${GH_APP_INSTALLATION_ID:-}
+      GH_APP_BOT_USER_ID: ${GH_APP_BOT_USER_ID:-}

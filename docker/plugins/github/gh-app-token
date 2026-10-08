@@ -79,15 +79,21 @@ fi
 [ -n "$installation_id" ] || fail "no installation id available (set GH_APP_INSTALLATION_ID in .env, or check that the container startup hook ran successfully)"
 
 jwt=$(make_jwt)
-response=$(curl -fsS -X POST \
+response_file=$(mktemp)
+trap 'rm -f "$response_file"' EXIT
+status=$(curl -sS -X POST -o "$response_file" -w '%{http_code}' \
     -H "Authorization: Bearer $jwt" \
     -H "Accept: application/vnd.github+json" \
     "https://api.github.com/app/installations/${installation_id}/access_tokens") \
-    || fail "could not mint installation token for installation $installation_id (check GH_APP_ID, GH_APP_INSTALLATION_ID, and that the App is still installed)"
+    || status=000
+if [ "$status" != 201 ]; then
+    message=$(jq -r '.message // empty' "$response_file" 2>/dev/null || true)
+    fail "token minting: HTTP $status ${message:-no response body} — check GH_APP_ID, GH_APP_INSTALLATION_ID, and that the App is still installed on installation $installation_id"
+fi
 
-token=$(printf '%s' "$response" | jq -r '.token // empty')
-expires_at_iso=$(printf '%s' "$response" | jq -r '.expires_at // empty')
-[ -n "$token" ] || fail "unexpected response from GitHub: $response"
+token=$(jq -r '.token // empty' "$response_file")
+expires_at_iso=$(jq -r '.expires_at // empty' "$response_file")
+[ -n "$token" ] || fail "token minting: response contained no token"
 
 expires_at=$(date -d "$expires_at_iso" +%s)
 
