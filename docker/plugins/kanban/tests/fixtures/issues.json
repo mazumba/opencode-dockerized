@@ -1,0 +1,115 @@
+[
+  {
+    "id": "id-1",
+    "identifier": "DEY-1",
+    "createdAt": "2026-10-01T10:00:00Z",
+    "state": "Agent review",
+    "labels": [],
+    "projectPath": "/repo"
+  },
+  {
+    "id": "id-2",
+    "identifier": "DEY-2",
+    "createdAt": "2026-10-02T10:00:00Z",
+    "state": "Agent review",
+    "labels": [],
+    "projectPath": "/repo"
+  },
+  {
+    "id": "id-3",
+    "identifier": "DEY-3",
+    "createdAt": "2026-10-03T10:00:00Z",
+    "state": "In Progress",
+    "labels": [
+      "agent:changes-requested"
+    ],
+    "projectPath": "/repo"
+  },
+  {
+    "id": "id-4",
+    "identifier": "DEY-4",
+    "createdAt": "2026-10-01T09:00:00Z",
+    "state": "In Progress",
+    "labels": [],
+    "projectPath": "/repo"
+  },
+  {
+    "id": "id-5",
+    "identifier": "DEY-5",
+    "createdAt": "2026-10-01T08:00:00Z",
+    "state": "Ready for agent",
+    "labels": [
+      "needs grilling",
+      "refined"
+    ],
+    "projectPath": "/repo"
+  },
+  {
+    "id": "id-6",
+    "identifier": "DEY-6",
+    "createdAt": "2026-10-02T08:00:00Z",
+    "state": "Ready for agent",
+    "labels": [
+      "refined"
+    ],
+    "projectPath": "/repo"
+  },
+  {
+    "id": "id-7",
+    "identifier": "DEY-7",
+    "createdAt": "2026-10-03T08:00:00Z",
+    "state": "Ready for agent",
+    "labels": [
+      "investigate"
+    ],
+    "projectPath": "/repo"
+  },
+  {
+    "id": "id-8",
+    "identifier": "DEY-8",
+    "createdAt": "2026-10-04T08:00:00Z",
+    "state": "Backlog",
+    "labels": [],
+    "projectPath": "/repo"
+  },
+  {
+    "id": "id-9",
+    "identifier": "DEY-9",
+    "createdAt": "2026-10-04T09:00:00Z",
+    "state": "Backlog",
+    "labels": [
+      "refined"
+    ],
+    "projectPath": "/repo"
+  },
+  {
+    "id": "id-10",
+    "identifier": "DEY-10",
+    "createdAt": "2026-10-04T10:00:00Z",
+    "state": "Backlog",
+    "labels": [
+      "needs grilling"
+    ],
+    "projectPath": "/repo"
+  },
+  {
+    "id": "id-11",
+    "identifier": "DEY-11",
+    "createdAt": "2026-10-04T11:00:00Z",
+    "state": "Backlog",
+    "labels": [
+      "investigate"
+    ],
+    "projectPath": "/repo"
+  },
+  {
+    "id": "id-12",
+    "identifier": "DEY-12",
+    "createdAt": "2026-10-04T12:00:00Z",
+    "state": "Backlog",
+    "labels": [
+      "bug"
+    ],
+    "projectPath": "/repo"
+  }
+]

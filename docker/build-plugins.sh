@@ -18,6 +18,9 @@ PACKAGE_JSON="$OPENCODE_CONFIG_DIR/package.json"
 MCP_MARKER="// {{mcp-plugins}}"
 AGENT_MARKER="// {{agent-plugins}}"
 PERMISSION_MARKER="// {{permission-plugins}}"
+COMMANDS_DIR="$OPENCODE_CONFIG_DIR/commands"
+COMMANDS_MANIFEST="$COMMANDS_DIR/.plugin-commands"
+COMMAND_FILE_PATTERN='^[A-Za-z0-9_-]+\.md$'
 
 DRY_RUN=false
 for arg in "$@"; do
@@ -31,6 +34,34 @@ for plugin in "${_raw[@]}"; do
     plugin="$(echo "$plugin" | tr -d '[:space:]')"
     [ -z "$plugin" ] && continue
     plugin_list+=("$plugin")
+done
+
+# ── Phase 0: Plugin dependencies (<name>.requires) ───────────────────────────
+# One plugin name per line; blank lines and '#' comments are ignored. Every
+# required plugin must exist and be active. Order in PLUGINS does not matter.
+for plugin in "${plugin_list[@]}"; do
+    requires_file="$PLUGINS_DIR/${plugin}/${plugin}.requires"
+    [ -f "$requires_file" ] || continue
+    while IFS= read -r dep || [ -n "$dep" ]; do
+        dep="${dep%%#*}"
+        dep="$(echo "$dep" | tr -d '[:space:]')"
+        [ -z "$dep" ] && continue
+        if [ ! -f "$PLUGINS_DIR/${dep}/${dep}.dockerfile" ] && [ ! -f "$PLUGINS_DIR/${dep}.dockerfile" ]; then
+            echo "Error: plugin '$plugin' requires plugin '$dep', which does not exist (expected $PLUGINS_DIR/${dep}/${dep}.dockerfile)" >&2
+            exit 1
+        fi
+        active=false
+        for candidate in "${plugin_list[@]}"; do
+            if [ "$candidate" = "$dep" ]; then
+                active=true
+                break
+            fi
+        done
+        if ! $active; then
+            echo "Error: plugin '$plugin' requires plugin '$dep' (add it to PLUGINS)" >&2
+            exit 1
+        fi
+    done < "$requires_file"
 done
 
 # ── Phase 1: Dockerfile injection ────────────────────────────────────────────
@@ -281,6 +312,62 @@ for line in "${out_lines[@]}"; do
 done
 fi # end: has base file check
 
+# ── Phase 4: Slash commands (<name>.commands/*.md) ──────────────────────────
+# Active plugins' command files are installed into $COMMANDS_DIR and tracked in
+# $COMMANDS_MANIFEST. Each build first removes the files listed in the previous
+# manifest, so disabling a plugin removes its commands. Existing files that are
+# not in the previous manifest are never overwritten. All checks run before any
+# write (including in dry-run).
+old_commands=()
+if [ -f "$COMMANDS_MANIFEST" ]; then
+    while IFS= read -r name || [ -n "$name" ]; do
+        [ -z "$name" ] && continue
+        if [[ ! "$name" =~ $COMMAND_FILE_PATTERN ]]; then
+            echo "Error: invalid entry '$name' in $COMMANDS_MANIFEST" >&2
+            exit 1
+        fi
+        old_commands+=("$name")
+    done < "$COMMANDS_MANIFEST"
+fi
+
+new_commands=()
+new_command_sources=()
+new_command_owners=()
+for plugin in "${plugin_list[@]}"; do
+    plugin_commands_dir="$PLUGINS_DIR/${plugin}/${plugin}.commands"
+    [ -d "$plugin_commands_dir" ] || continue
+    for src in "$plugin_commands_dir"/*; do
+        [ -e "$src" ] || continue
+        file="$(basename "$src")"
+        if [ ! -f "$src" ] || [[ ! "$file" =~ $COMMAND_FILE_PATTERN ]]; then
+            echo "Error: plugin '$plugin' command '$file' is invalid (expected a file matching [A-Za-z0-9_-]+.md)" >&2
+            exit 1
+        fi
+        for i in "${!new_commands[@]}"; do
+            if [ "${new_commands[$i]}" = "$file" ]; then
+                echo "Error: plugins '${new_command_owners[$i]}' and '$plugin' both ship command '$file'" >&2
+                exit 1
+            fi
+        done
+        if [ -e "$COMMANDS_DIR/$file" ]; then
+            is_tracked=false
+            for old in ${old_commands[@]+"${old_commands[@]}"}; do
+                if [ "$old" = "$file" ]; then
+                    is_tracked=true
+                    break
+                fi
+            done
+            if ! $is_tracked; then
+                echo "Error: plugin '$plugin' command '$file' conflicts with existing .opencode/config/commands/$file" >&2
+                exit 1
+            fi
+        fi
+        new_commands+=("$file")
+        new_command_sources+=("$src")
+        new_command_owners+=("$plugin")
+    done
+done
+
 # ── Output / dry-run ──────────────────────────────────────────────────────────
 if $DRY_RUN; then
     echo "=== Dockerfile.generated diff ==="
@@ -293,6 +380,16 @@ if $DRY_RUN; then
     fi
     echo "=== package.json diff ==="
     diff <(cat "$PACKAGE_JSON" 2>/dev/null || true) <(echo "$merged_pkg") || true
+    if [ "${#old_commands[@]}" -gt 0 ] || [ "${#new_commands[@]}" -gt 0 ]; then
+        echo ""
+        echo "=== commands ==="
+        for file in ${old_commands[@]+"${old_commands[@]}"}; do
+            echo "remove: $file"
+        done
+        for file in ${new_commands[@]+"${new_commands[@]}"}; do
+            echo "install: $file"
+        done
+    fi
     echo "[dry-run] No files written."
     exit 0
 fi
@@ -300,6 +397,19 @@ fi
 printf '%s' "$generated_dockerfile" > "$OUT"
 [ -n "$generated_jsonc" ] && printf '%s' "$generated_jsonc" > "$OPENCODE_JSONC_OUT"
 printf '%s' "$merged_pkg" > "$PACKAGE_JSON"
+
+for file in ${old_commands[@]+"${old_commands[@]}"}; do
+    rm -f "${COMMANDS_DIR:?}/$file"
+done
+if [ "${#new_commands[@]}" -gt 0 ]; then
+    mkdir -p "$COMMANDS_DIR"
+    for i in "${!new_commands[@]}"; do
+        cp "${new_command_sources[$i]}" "$COMMANDS_DIR/${new_commands[$i]}"
+    done
+    printf '%s\n' "${new_commands[@]}" > "$COMMANDS_MANIFEST"
+else
+    rm -f "$COMMANDS_MANIFEST"
+fi
 
 # ── Docker build ──────────────────────────────────────────────────────────────
 OPENCODE_DOCKERFILE=Dockerfile.generated \
