@@ -8,6 +8,7 @@ import {
   autoLabelTargets,
   investigateBlocker,
   investigateRequests,
+  investigationOutcome,
   isBackedOff,
   parseInvestigate,
   parseProjectPath,
@@ -46,7 +47,7 @@ describe("investigateRequests", () => {
   const requests = investigateRequests(allComments, "viewer", NOW);
 
   test("keeps only authentic, recent, unanswered requests, oldest first", () => {
-    expect(requests.map((r) => r.comment.id)).toEqual(["c-question", "c-ok"]);
+    expect(requests.map((r) => r.comment.id)).toEqual(["c-eyes-other", "c-question", "c-ok"]);
   });
   test("rejects other users, missing user, external, bot, and synced comments", () => {
     const rejected = ["c-other-user", "c-no-user", "c-external", "c-bot", "c-synced"];
@@ -57,8 +58,33 @@ describe("investigateRequests", () => {
     expect(requests.map((r) => r.comment.id).some((id) => rejected.includes(id))).toBe(false);
   });
   test("carries the question", () => {
-    expect(requests[0].question).toBe("Why is the cache slow?\nSee also the loader.");
-    expect(requests[1].question).toBe("");
+    const byId = (id: string) => requests.find((r) => r.comment.id === id)!;
+    expect(byId("c-question").question).toBe("Why is the cache slow?\nSee also the loader.");
+    expect(byId("c-ok").question).toBe("");
+  });
+  test("the viewer's eyes reaction marks a comment as handled", () => {
+    expect(requests.map((r) => r.comment.id)).not.toContain("c-eyes-viewer");
+  });
+  test("someone else's eyes reaction does not", () => {
+    expect(requests.map((r) => r.comment.id)).toContain("c-eyes-other");
+  });
+  test("a legacy `Agent investigation:` reply without a reaction still marks it handled", () => {
+    const legacy = allComments.find((c) => c.id === "c-answered")!;
+    expect(legacy.reactions).toEqual([]);
+    expect(requests.map((r) => r.comment.id)).not.toContain("c-answered");
+  });
+});
+
+describe("investigationOutcome", () => {
+  const ok = { exitCode: 0, timedOut: false, aborted: false, minutes: 3 };
+  test("success needs exit 0 and swapped labels", () => {
+    expect(investigationOutcome(ok, true)).toEqual({ emoji: "white_check_mark" });
+  });
+  test("failures map to x with a reason, most specific first", () => {
+    expect(investigationOutcome({ ...ok, aborted: true }, true)).toEqual({ emoji: "x", reason: "poller stopped" });
+    expect(investigationOutcome({ ...ok, timedOut: true, exitCode: null }, false)).toEqual({ emoji: "x", reason: "timeout after 3 min" });
+    expect(investigationOutcome({ ...ok, exitCode: 2 }, true)).toEqual({ emoji: "x", reason: "exit code 2" });
+    expect(investigationOutcome(ok, false)).toEqual({ emoji: "x", reason: "label not changed" });
   });
 });
 

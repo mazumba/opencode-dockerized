@@ -32,6 +32,7 @@ interface RawComment {
   botActor: { id: string } | null;
   syncedWith: unknown[] | null;
   issue: { id: string; identifier: string } | null;
+  reactions: { emoji: string; user: { id: string } | null }[];
 }
 
 const ISSUE_FIELDS = `
@@ -180,6 +181,7 @@ export class LinearClient {
             botActor { id }
             syncedWith { service }
             issue { id identifier }
+            reactions { emoji user { id } }
           }
           pageInfo { hasNextPage endCursor }
         }
@@ -200,6 +202,7 @@ export class LinearClient {
         synced: (c.syncedWith?.length ?? 0) > 0,
         issueId: c.issue!.id,
         issueIdentifier: c.issue!.identifier,
+        reactions: (c.reactions ?? []).map((r) => ({ emoji: r.emoji, userId: r.user?.id ?? null })),
       }));
   }
 
@@ -207,6 +210,13 @@ export class LinearClient {
     await this.request(
       `mutation($input: CommentCreateInput!) { commentCreate(input: $input) { success } }`,
       { input: { issueId, body, ...(parentId ? { parentId } : {}) } },
+    );
+  }
+
+  async react(commentId: string, emoji: string): Promise<void> {
+    await this.request(
+      `mutation($input: ReactionCreateInput!) { reactionCreate(input: $input) { success } }`,
+      { input: { commentId, emoji } },
     );
   }
 

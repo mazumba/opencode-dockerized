@@ -31,6 +31,17 @@ export interface Issue {
   projectPath: string | null;
 }
 
+export interface Reaction {
+  emoji: string;
+  userId: string | null;
+}
+
+export const REACTION = {
+  claimed: "eyes",
+  done: "white_check_mark",
+  failed: "x",
+} as const;
+
 export interface Comment {
   id: string;
   body: string;
@@ -42,6 +53,7 @@ export interface Comment {
   synced: boolean;
   issueId: string;
   issueIdentifier: string;
+  reactions: Reaction[];
 }
 
 export interface InvestigateRequest {
@@ -70,7 +82,11 @@ export function parseInvestigate(body: string): { question: string } | null {
   return { question };
 }
 
-/** Investigate requests that are authentic, recent, and not yet answered, oldest first. */
+/**
+ * Investigate requests that are authentic, recent, and not yet handled, oldest first.
+ * Handled = the viewer reacted with eyes (the claim), or a reply starting with
+ * `Agent investigation:` exists (legacy comments). Reactions by others do not count.
+ */
 export function investigateRequests(
   comments: Comment[],
   viewerId: string,
@@ -89,9 +105,30 @@ export function investigateRequests(
     if (comment.externalUserId || comment.botActorId || comment.synced) continue;
     if (now - Date.parse(comment.createdAt) > INVESTIGATE_WINDOW_MS) continue;
     if (answered.has(comment.id)) continue;
+    if (comment.reactions.some((r) => r.emoji === REACTION.claimed && r.userId === viewerId)) continue;
     requests.push({ comment, question: parsed.question });
   }
   return requests;
+}
+
+export interface InvestigationRun {
+  exitCode: number | null;
+  timedOut: boolean;
+  aborted: boolean;
+  minutes: number;
+}
+
+export type InvestigationOutcome =
+  | { emoji: typeof REACTION.done }
+  | { emoji: typeof REACTION.failed; reason: string };
+
+/** Final reaction (and failure reason) for an investigation that was claimed and run. */
+export function investigationOutcome(run: InvestigationRun, labelsSwapped: boolean): InvestigationOutcome {
+  if (run.aborted) return { emoji: REACTION.failed, reason: "poller stopped" };
+  if (run.timedOut) return { emoji: REACTION.failed, reason: `timeout after ${run.minutes} min` };
+  if (run.exitCode !== 0) return { emoji: REACTION.failed, reason: `exit code ${run.exitCode}` };
+  if (!labelsSwapped) return { emoji: REACTION.failed, reason: "label not changed" };
+  return { emoji: REACTION.done };
 }
 
 /** Why an issue cannot be investigated, or null if it can. */
