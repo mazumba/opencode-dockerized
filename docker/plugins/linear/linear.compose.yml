@@ -1,0 +1,8 @@
+# Plugin: linear — Compose fragment
+# Passes the Linear API key into the container. Required when the `linear`
+# plugin is selected via PLUGINS — see README "Linear plugin" for how to
+# create the key and set it in .env.
+services:
+  opencode:
+    environment:
+      LINEAR_API_KEY: ${LINEAR_API_KEY:?LINEAR_API_KEY is not set. Set it in .env (see README "Linear plugin")}

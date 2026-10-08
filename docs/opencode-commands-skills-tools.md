@@ -122,3 +122,14 @@ The `browser` plugin provides [`@playwright/mcp@0.0.72`](https://github.com/micr
 
 - **Owner:** Repo Maintainers
 - **Cadence:** Monthly dependency/version review + immediate review on any OpenCode release, `@playwright/mcp` release, or CVE advisory. Review cadence: monthly.
+
+## Linear MCP (linear plugin)
+
+The `linear` plugin provides Linear's remote MCP server (`https://mcp.linear.app/mcp`), authenticated with `LINEAR_API_KEY`.
+
+**How it works:**
+
+- Enabled with `PLUGINS=linear` and `LINEAR_API_KEY` in `.env`, then `make opencode-build-plugins` (opt-in).
+- Only the `linear` subagent can use `linear_*` tools; other agents delegate to it.
+- Startup fails if the API key is missing or rejected by Linear.
+- Writes are attributed to the owner of the API key. See README "Linear plugin".

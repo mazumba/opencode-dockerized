@@ -81,6 +81,7 @@ Available plugins:
 | `browser` | Playwright Chromium (headless, MCP-controlled) — see [Browser MCP](#browser-mcp-playwright) below |
 | `image`   | `vips` (re-encode/strip images), `exiftool` (inspect metadata), `clamav`/`clamav-freshclam` (scan for malware) — see [Image plugin](#image-plugin) below |
 | `github`  | GitHub CLI (`gh`) and git, authenticated as a GitHub App — see [GitHub plugin](#github-plugin) below |
+| `linear`  | Linear remote MCP and a `linear` subagent, authenticated with a Linear API key — see [Linear plugin](#linear-plugin) below |
 
 To enable plugins, set `PLUGINS` in your `.env` file (comma-separated):
 
@@ -222,6 +223,35 @@ GH_APP_BOT_USER_ID=123456789
 **Branch protection matters more than usual here.** `Contents: write` lets the bot force-push to or delete any branch, and merge its own PRs, unless you restrict it. Add a branch ruleset on `main` (Settings → Rules → Rulesets) requiring a PR with at least one approval and blocking force-push/deletion — the bot can't approve its own PR, so it can't merge it either. On GitHub Free this is only enforced on public repos; private repos need GitHub Pro (or Team, for organizations) for rulesets to apply.
 
 **Revoking access:** uninstall the App, or delete/rotate the private key — either stops `gh-app-token` from minting new tokens within the hour.
+
+### Linear plugin
+
+The `linear` plugin adds Linear's remote MCP server (`https://mcp.linear.app/mcp`) and a `linear` subagent for reading, searching, creating, and updating issues, projects, cycles, and comments. It authenticates with a Linear personal API key.
+
+**1. Create an API key** in Linear: Settings → Account → Security & Access → Personal API keys. For read-only access, create the key with only the Read permission.
+
+**2. Set in `.env`:**
+
+```sh
+# .env
+PLUGINS=linear
+LINEAR_API_KEY=lin_api_...
+```
+
+```sh
+make opencode-build-plugins
+make opencode-run
+```
+
+**Startup behavior:** every container start runs `docker/plugins/linear/linear.entrypoint.sh` as root, before the privilege drop. It queries the Linear GraphQL API with the key and prints `linear plugin: ready (<user> @ <organization>)`. If the key is missing or Linear rejects it, container startup fails (fail-closed).
+
+**Access:** only the `linear` subagent can call `linear_*` tools. The build denies them for every other agent, which delegate Linear work to `linear` and get back a short summary. Your `opencode.jsonc.base` needs the `// {{agent-plugins}}` and `// {{permission-plugins}}` markers, as for the browser plugin.
+
+**Security notes:**
+
+- The key is in the container environment, so any agent with `bash` can read it. Use a dedicated key, or a Read-only key if writes are not needed.
+- Everything the agent writes in Linear is attributed to the key's owner.
+- OAuth is not supported: its callback targets `localhost` inside the container.
 
 ### Adding a new plugin
 
