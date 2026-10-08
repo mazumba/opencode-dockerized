@@ -126,3 +126,16 @@ This OpenCode instance runs inside Docker. The following applies to any tool tha
 - To reach services running on the **host machine**, use `host.docker.internal` instead of `localhost`.
 - Example: a local dev server on port 9099 is reachable at `http://host.docker.internal:9099`, not `http://localhost:9099`.
 - `localhost` inside the container refers to the container's own loopback, not the host.
+
+## Git Push (GitHub)
+
+SSH is not available in this container, so `git push` to a `git@github.com:` remote always fails. Push over HTTPS using the `gh` credentials instead. Do not try SSH first.
+
+```bash
+git -c credential.helper= -c 'credential.helper=!gh auth git-credential' \
+  push -u https://github.com/<owner>/<repo>.git <branch>
+```
+
+- Take `<owner>/<repo>` from `git remote get-url origin`.
+- Do not change the remote URL or the git config. Pass the credential helper per command, as shown.
+- Use `gh pr create --repo <owner>/<repo> --head <branch>` for PRs. Without `--repo`, `gh` may not resolve the SSH remote.
