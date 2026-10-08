@@ -4,7 +4,7 @@ export
 USER_UID ?= $(shell id -u)
 USER_GID ?= $(shell id -g)
 
-opencode-down: ## stop and remove opencode container
+opencode-down: kanban-poller-down ## stop and remove opencode container
 	docker/compose-with-plugins.sh down --remove-orphans
 
 opencode-build: opencode-down ## build opencode container

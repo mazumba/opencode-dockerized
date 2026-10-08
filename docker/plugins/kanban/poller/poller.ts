@@ -9,9 +9,11 @@ import { abortCurrentRun, describeRun, runAgent, type RunResult } from "./runner
 import {
   INVESTIGATE_WINDOW_MS,
   LABEL,
+  REACTION,
   STATE,
   autoLabelTargets,
   investigateBlocker,
+  investigationOutcome,
   investigateRequests,
   pickFix,
   pickReview,
@@ -20,6 +22,7 @@ import {
   setBackoff,
   staleClaims,
   type Backoff,
+  type Comment,
   type Issue,
 } from "./select.ts";
 
@@ -139,6 +142,21 @@ async function settle(
 
 // ── Pass steps. Each returns true if it consumed the pass's single agent run. ──
 
+/** Adds a reaction. Returns false (and logs) on failure instead of throwing. */
+async function react(ctx: Context, request: Comment, emoji: string): Promise<boolean> {
+  if (ctx.config.dryRun) {
+    log("dry-run.react", { ticket: request.issueIdentifier, emoji });
+    return true;
+  }
+  try {
+    await ctx.linear.react(request.id, emoji);
+    return true;
+  } catch (error) {
+    log("react.error", { ticket: request.issueIdentifier, emoji, message: (error as Error).message });
+    return false;
+  }
+}
+
 async function stepInvestigate(ctx: Context): Promise<boolean> {
   const since = new Date(Date.now() - INVESTIGATE_WINDOW_MS).toISOString();
   const comments = await ctx.linear.commentsSince(since);
@@ -148,9 +166,12 @@ async function stepInvestigate(ctx: Context): Promise<boolean> {
     if (blocker) {
       log("investigate.skip", { ticket: issue.identifier });
       await comment(ctx, issue, `Agent investigation: skipped — ${blocker}`, request.id);
+      await react(ctx, request, REACTION.failed);
       continue;
     }
-    await comment(ctx, issue, "Agent investigation: started", request.id);
+    // The eyes reaction is the claim. Without it the request would run again every pass.
+    if (!(await react(ctx, request, REACTION.claimed))) return false;
+
     const message = question ? `${issue.identifier} ${question}` : issue.identifier;
     const result = await run(ctx, "investigate", issue, message, ctx.config.timeoutInvestigateMs);
     if (!result) return true;
@@ -158,12 +179,15 @@ async function stepInvestigate(ctx: Context): Promise<boolean> {
     const after = await ctx.linear.issue(issue.identifier);
     const swapped =
       after.labels.includes(LABEL.needsGrilling) && !after.labels.includes(LABEL.investigate);
-    if (result.aborted || !swapped || result.timedOut || result.exitCode !== 0) {
-      const reason =
-        result.aborted || result.timedOut || result.exitCode !== 0
-          ? describeRun(result)
-          : "label not changed";
-      await comment(ctx, issue, `Agent investigation: failed — ${reason}`, request.id);
+    const outcome = investigationOutcome(
+      { ...result, minutes: minutes(result.durationMs) },
+      swapped,
+    );
+    if (outcome.emoji === REACTION.done) {
+      await react(ctx, request, REACTION.done);
+    } else {
+      await comment(ctx, issue, `Agent investigation: failed — ${outcome.reason}`, request.id);
+      await react(ctx, request, REACTION.failed);
     }
     return true;
   }

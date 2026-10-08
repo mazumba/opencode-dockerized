@@ -290,6 +290,10 @@ The `kanban` plugin turns a Linear board (team `DEY`) into a work queue. Agents 
 
 Investigation and grilling are always started by the human.
 
+**Answering a few questions without grilling:** write the answers as a ticket comment, add the label `refined`, then move the ticket to `Ready for agent`. Removing `needs grilling` alone is not enough: the poller adds it again to every `Backlog` ticket that has none of the three labels.
+
+**What counts as the spec.** The agents read the ticket description plus all comments (Linear and GitHub-synced), oldest to newest. A newer statement overrides an older one. Human comments, including GitHub-synced ones, outrank `Agent investigation:` proposals: an investigation is input, a human answer is a decision. Status comments (`Agent:`, `Agent review:`, `Agent investigation: skipped`, `Agent investigation: failed`) are not spec. If comments contradict each other and their order does not resolve it, the agent moves the ticket to `Needs human` with the open question instead of guessing. The reviewer checks the PR against the same spec.
+
 **Commands:**
 
 | Command | Agent | Started by |
@@ -323,7 +327,8 @@ Host repositories must be mounted into the container at identical paths (see `co
 - The Docker socket is mounted (see [Docker Socket Access](#docker-socket-access)), so an agent can control the host.
 - `LINEAR_API_KEY` is readable by every agent with `bash`.
 - Linear writes are attributed to the key's owner.
-- Ticket, comment, and GitHub issue text is untrusted input. The commands tell agents to treat it as a spec only, but this is not enforced technically.
+- The trust model assumes a private repository: every ticket comment, including GitHub-synced ones, is part of the spec. If the synced GitHub repo becomes public, or a public repo is linked to a project, anyone can write spec through GitHub comments. Reconsider this before that happens.
+- The commands carry Hard limits that apply to whoever wrote the text (never reveal secrets, never work outside the worktree or in another repo, never change credentials, never merge or approve). They are instructions to the model, not technical enforcement.
 
 #### Poller
 
@@ -346,7 +351,16 @@ After a work or review run, the ticket must be in `Agent review` (or `Needs huma
 Optional question, on the same line or the following lines.
 ```
 
-The first line must be exactly `/investigate` or start with `/investigate `. Only comments written by the API key owner count; comments with an external user, a bot actor, or a sync marker (GitHub-synced comments) are ignored, as are comments older than 7 days. The poller replies `Agent investigation: started` (this is also the dedupe marker), runs the command, and replies `Agent investigation: failed — <reason>` if the labels were not swapped. If the ticket is not in `Backlog` or lacks `investigate`, it replies `Agent investigation: skipped — <reason>`. On SIGTERM during an investigation the reply says `poller stopped`; the state stays `Backlog`.
+The first line must be exactly `/investigate` or start with `/investigate `. Only comments written by the API key owner count; comments with an external user, a bot actor, or a sync marker (GitHub-synced comments) are ignored, as are comments older than 7 days. The poller reports progress as reactions on your comment:
+
+| Reaction | Meaning |
+|----------|---------|
+| 👀 (`eyes`) | picked up; this is the claim, so the comment is not handled twice |
+| ✅ (`white_check_mark`) | finished: `investigate` was swapped for `needs grilling` |
+| 👀 + ❌ (`x`) | failed (non-zero exit, timeout, labels not swapped, or `poller stopped`); a reply `Agent investigation: failed — <reason>` explains |
+| ❌ (`x`) only | skipped because the ticket is not in `Backlog` or lacks `investigate`; a reply `Agent investigation: skipped — <reason>` explains |
+
+If the 👀 reaction cannot be added, nothing runs and the poller retries on the next pass. Legacy comments that already have a reply starting with `Agent investigation:` count as handled. Reactions by other users are ignored.
 
 **Make targets** (the `kanban` plugin must be in `PLUGINS`, then rebuild with `make opencode-build-plugins`):
 

@@ -9,7 +9,8 @@
     "botActorId": null,
     "synced": false,
     "issueId": "id-11",
-    "issueIdentifier": "DEY-11"
+    "issueIdentifier": "DEY-11",
+    "reactions": []
   },
   {
     "id": "c-question",
@@ -21,7 +22,8 @@
     "botActorId": null,
     "synced": false,
     "issueId": "id-11",
-    "issueIdentifier": "DEY-11"
+    "issueIdentifier": "DEY-11",
+    "reactions": []
   },
   {
     "id": "c-other-user",
@@ -33,7 +35,8 @@
     "botActorId": null,
     "synced": false,
     "issueId": "id-11",
-    "issueIdentifier": "DEY-11"
+    "issueIdentifier": "DEY-11",
+    "reactions": []
   },
   {
     "id": "c-no-user",
@@ -45,7 +48,8 @@
     "botActorId": null,
     "synced": false,
     "issueId": "id-11",
-    "issueIdentifier": "DEY-11"
+    "issueIdentifier": "DEY-11",
+    "reactions": []
   },
   {
     "id": "c-external",
@@ -57,7 +61,8 @@
     "botActorId": null,
     "synced": false,
     "issueId": "id-11",
-    "issueIdentifier": "DEY-11"
+    "issueIdentifier": "DEY-11",
+    "reactions": []
   },
   {
     "id": "c-bot",
@@ -69,7 +74,8 @@
     "botActorId": "bot",
     "synced": false,
     "issueId": "id-11",
-    "issueIdentifier": "DEY-11"
+    "issueIdentifier": "DEY-11",
+    "reactions": []
   },
   {
     "id": "c-synced",
@@ -81,7 +87,8 @@
     "botActorId": null,
     "synced": true,
     "issueId": "id-11",
-    "issueIdentifier": "DEY-11"
+    "issueIdentifier": "DEY-11",
+    "reactions": []
   },
   {
     "id": "c-answered",
@@ -93,7 +100,8 @@
     "botActorId": null,
     "synced": false,
     "issueId": "id-11",
-    "issueIdentifier": "DEY-11"
+    "issueIdentifier": "DEY-11",
+    "reactions": []
   },
   {
     "id": "c-answered-reply",
@@ -105,7 +113,8 @@
     "botActorId": null,
     "synced": false,
     "issueId": "id-11",
-    "issueIdentifier": "DEY-11"
+    "issueIdentifier": "DEY-11",
+    "reactions": []
   },
   {
     "id": "c-suffix",
@@ -117,7 +126,8 @@
     "botActorId": null,
     "synced": false,
     "issueId": "id-11",
-    "issueIdentifier": "DEY-11"
+    "issueIdentifier": "DEY-11",
+    "reactions": []
   },
   {
     "id": "c-mid",
@@ -129,7 +139,8 @@
     "botActorId": null,
     "synced": false,
     "issueId": "id-11",
-    "issueIdentifier": "DEY-11"
+    "issueIdentifier": "DEY-11",
+    "reactions": []
   },
   {
     "id": "c-old",
@@ -141,6 +152,43 @@
     "botActorId": null,
     "synced": false,
     "issueId": "id-11",
-    "issueIdentifier": "DEY-11"
+    "issueIdentifier": "DEY-11",
+    "reactions": []
+  },
+  {
+    "id": "c-eyes-viewer",
+    "body": "/investigate",
+    "createdAt": "2026-10-07T04:00:00Z",
+    "parentId": null,
+    "userId": "viewer",
+    "externalUserId": null,
+    "botActorId": null,
+    "synced": false,
+    "issueId": "id-11",
+    "issueIdentifier": "DEY-11",
+    "reactions": [
+      {
+        "emoji": "eyes",
+        "userId": "viewer"
+      }
+    ]
+  },
+  {
+    "id": "c-eyes-other",
+    "body": "/investigate",
+    "createdAt": "2026-10-07T04:30:00Z",
+    "parentId": null,
+    "userId": "viewer",
+    "externalUserId": null,
+    "botActorId": null,
+    "synced": false,
+    "issueId": "id-11",
+    "issueIdentifier": "DEY-11",
+    "reactions": [
+      {
+        "emoji": "eyes",
+        "userId": "someone-else"
+      }
+    ]
   }
 ]
