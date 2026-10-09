@@ -2,7 +2,7 @@
 // everything that fails throws GitError. Mutations are the caller's to guard.
 import { stat } from "node:fs/promises";
 import { exec as defaultExec, type Exec } from "./exec.ts";
-import type { WorktreePlan } from "./select.ts";
+import { REPO_PATTERN, type WorktreePlan } from "./select.ts";
 
 const GIT_TIMEOUT_MS = 60_000;
 const FETCH_TIMEOUT_MS = 180_000;
@@ -19,7 +19,7 @@ export interface Git {
   statusPorcelain(worktree: string): Promise<string>;
   revParse(path: string, ref: string): Promise<string | null>;
   isIgnored(path: string, relPath: string): Promise<boolean>;
-  fetch(path: string): Promise<void>;
+  fetch(path: string, repo: string): Promise<void>;
   worktreeAdd(path: string, worktree: string, plan: Exclude<WorktreePlan, { kind: "reuse" }>): Promise<void>;
   worktreeRemove(path: string, worktree: string): Promise<void>;
   branchDelete(path: string, branch: string): Promise<void>;
@@ -42,7 +42,11 @@ function subcommand(args: string[]): string {
 
 export function createGit(run: Exec = defaultExec): Git {
   async function git(args: string[], timeoutMs = GIT_TIMEOUT_MS) {
-    const result = await run(["git", ...args], { timeoutMs });
+    // Trust exactly the directory git is pointed at (never "*"), so ownership quirks
+    // on the mounted checkout or its worktrees cannot fail poller calls.
+    const dir = args[args.indexOf("-C") + 1];
+    const trusted = args.includes("-C") ? ["-c", `safe.directory=${dir}`] : [];
+    const result = await run(["git", ...trusted, ...args], { timeoutMs });
     if (result.timedOut) throw new GitError(`git ${subcommand(args)} timed out`);
     return result;
   }
@@ -81,8 +85,16 @@ export function createGit(run: Exec = defaultExec): Git {
       if (result.code === 1) return false;
       throw new GitError(`git check-ignore failed (exit ${result.code}): ${result.stderr.trim().slice(0, 200)}`);
     },
-    async fetch(path) {
-      await ok([...GH_CREDENTIAL_ARGS, "-C", path, "fetch", "origin"], FETCH_TIMEOUT_MS);
+    async fetch(path, repo) {
+      if (!REPO_PATTERN.test(repo)) throw new GitError("git fetch refused: invalid repo name");
+      // HTTPS regardless of origin's URL form: the container has no ssh.
+      await ok(
+        [
+          ...GH_CREDENTIAL_ARGS, "-C", path, "fetch", "--prune",
+          `https://github.com/${repo}.git`, "+refs/heads/*:refs/remotes/origin/*",
+        ],
+        FETCH_TIMEOUT_MS,
+      );
     },
     async worktreeAdd(path, worktree, plan) {
       const base = ["-C", path, "worktree", "add"];

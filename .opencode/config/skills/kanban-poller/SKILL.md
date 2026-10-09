@@ -21,7 +21,8 @@ Code: `docker/plugins/kanban/poller/`. Tests: `docker/plugins/kanban/tests/`. Co
 6. New work: for the oldest `Ready for agent` ticket:
    1. IF it has `needs grilling` or `investigate` THEN move to `Backlog` (bounce), next ticket.
    2. Pre-flight. IF it fails THEN `Needs human`, next ticket.
-   3. ELSE claim with 👀 on the issue, move to `In Progress`, fetch and create/reuse the worktree at `<path>/.slim/worktrees/<id-lowercase>` with its `.slim/worktrees.json` lane, run `/work-ticket` with ctx. End pass.
+   3. Look up the PR for the ticket branch (`existingPrDecision`). IF it is `MERGED` or `CLOSED` THEN `Needs human` ("PR #n is merged/closed; open a new ticket"), next ticket. IF it is `OPEN` THEN pass `pr` in the ctx (follow-up, see below).
+   4. ELSE claim with 👀 on the issue, move to `In Progress`, fetch and create/reuse the worktree at `<path>/.slim/worktrees/<id-lowercase>` with its `.slim/worktrees.json` lane, run `/work-ticket` with ctx. End pass.
 7. IF nothing ran THEN log `pass.idle`.
 
 ## Review gate (`reviewGate` in `select.ts`, first match wins)
@@ -35,9 +36,13 @@ Code: `docker/plugins/kanban/poller/`. Tests: `docker/plugins/kanban/tests/`. Co
 7. ELSE review (reviewer gets ctx with `"ci":"green"`).
 
 Fix handling:
-1. IF prior `Agent review: changes requested` comments >= 2 THEN `Needs human` ("review limit reached").
+1. IF `Agent review: changes requested` comments created since the ticket last entered `Ready for agent` (all of them if it never did; from Linear issue history) >= 2 THEN `Needs human` ("review limit reached").
 2. ELSE add `agent:changes-requested`, move to `In Progress`, comment `Agent review: changes requested (round n/2) — <PR>` + line 2 `CI failed: <names>` or `merge conflicts with <base>`. The poller parses line 2 for `fix.cause`, so reviewer summaries must not start with those phrases.
 3. IF cause is `ci` THEN reply with the last 150 lines of the failed run log.
+
+## Follow-up after Ready for merge
+
+A human comments the desired changes and moves the ticket to `Ready for agent`. The poller finds the open PR on the branch and runs `/work-ticket` with `pr` and no `fix`; the worker pushes to that PR. The round count restarts at each entry into `Ready for agent`, so every request gets 2 review rounds. A merged or closed PR goes to `Needs human`.
 
 ## Pre-flight (work and fix runs)
 

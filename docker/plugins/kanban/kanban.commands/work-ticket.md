@@ -34,14 +34,14 @@ On any failure or blocker from step 3 on: move the issue to `Needs human`, comme
    - `ci`: failing checks are in `ctx.fix.summary` and the latest `Agent review: changes requested` comment and its reply (log tail). Use `gh pr checks` or `gh run view --log-failed` only if needed.
    - `conflict`: merge `origin/<defaultBranch>` into the branch, resolve conflicts, push. Merge, not rebase.
    - `review`: read the latest agent review on the PR (`gh pr view <n> --repo <repo> --comments`) and the latest Linear review comment. Address every finding.
-6. **Implement** the Spec in the worktree within the Hard limits. Change CI workflows or deploy config only if the ticket asks; say so in the PR body.
-7. **Verify.** Run the repo's own tests, lint, and format. Unfixable failure → failure rule with a short summary.
+6. **Implement** the Spec in the worktree within the Hard limits. Follow-up iff `ctx.pr` and no `ctx.fix`: a human asked for changes after review. The request is the newest human comments after the latest `Agent:`/`Agent review:` comments (same Spec rules and Hard limits). Implement it in the existing worktree and branch; never create a second PR. Change CI workflows or deploy config only if the ticket asks; say so in the PR body.
+7. **Verify.** If the repo documents how to set up a worktree's environment (AGENTS.md, project skills, e.g. a per-worktree Docker stack), do that first for this worktree only; never touch other lanes' stacks or ports. Then run the repo's own tests, lint, and format. Unfixable failure → failure rule with a short summary.
 8. **Commit and push.** Commit message references the ID. Push without force:
    ```bash
    git -c credential.helper= -c 'credential.helper=!gh auth git-credential' \
      push -u https://github.com/<owner>/<repo>.git <branch>
    ```
    - No `ctx.pr`: `gh pr create --repo <repo> --head <branch> --base <defaultBranch> --title "<ID>: <issue title>"`, body with summary, test evidence, and `Closes <ID>`. If the issue has an attachment to a GitHub issue of the same repo (`https://github.com/<owner>/<repo>/issues/<n>`), also add `Fixes #<n>`.
-   - `ctx.pr`: the push updates it; add a PR comment summarising the fixes.
+   - `ctx.pr`: the push updates it; add a PR comment summarising the fixes or follow-up changes.
 9. **Hand off.** Move the issue to `Agent review`. No comment.
 10. **Reply** with one short status line: ID, final state, PR URL or reason.

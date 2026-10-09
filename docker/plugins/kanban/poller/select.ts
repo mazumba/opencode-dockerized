@@ -220,7 +220,7 @@ function singleField(text: string, key: string, accept: (value: string) => boole
   return values.size === 1 ? [...values][0] : null;
 }
 
-const REPO_PATTERN = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
+export const REPO_PATTERN = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 const IDENTIFIER_PATTERN = /^[A-Z]+-[0-9]+$/;
 const BRANCH_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._/-]*$/;
 const SAFE_PATH_PATTERN = /^\/[^\0-\x1f]*$/;
@@ -322,8 +322,36 @@ export type GateDecision =
   | { kind: "fix"; cause: "ci" | "conflict"; failed: string[] }
   | { kind: "needsHuman"; reason: string };
 
-export function changesRequestedRounds(comments: { body: string }[]): number {
-  return comments.filter((c) => c.body.startsWith(CHANGES_REQUESTED_PREFIX)).length;
+/**
+ * Review rounds used: `Agent review: changes requested` comments created after `sinceIso`
+ * (when the ticket last entered Ready for agent); all of them when `sinceIso` is null.
+ */
+export function changesRequestedRounds(comments: TimedComment[], sinceIso: string | null): number {
+  const since = sinceIso === null ? -Infinity : Date.parse(sinceIso);
+  return comments.filter((c) => c.body.startsWith(CHANGES_REQUESTED_PREFIX) && Date.parse(c.createdAt) > since).length;
+}
+
+export interface StateEntry {
+  createdAt: string;
+  toState: string | null;
+}
+
+/** Latest time the issue moved into `state`, or null if it never did (in the history given). */
+export function lastEnteredState(history: StateEntry[], state: string): string | null {
+  const times = history.filter((h) => h.toState === state).map((h) => h.createdAt);
+  return times.length === 0 ? null : times.reduce((a, b) => (Date.parse(b) > Date.parse(a) ? b : a));
+}
+
+export type ExistingPrDecision =
+  | { kind: "new" }
+  | { kind: "follow-up"; pr: { number: number; url: string } }
+  | { kind: "needsHuman"; reason: string };
+
+/** What a `Ready for agent` ticket does given the PR already on its branch: new PR, follow-up on the open one, or stop. */
+export function existingPrDecision(pr: PrInfo | null): ExistingPrDecision {
+  if (!pr) return { kind: "new" };
+  if (pr.state === "OPEN") return { kind: "follow-up", pr: { number: pr.number, url: pr.url } };
+  return { kind: "needsHuman", reason: `PR #${pr.number} is ${pr.state.toLowerCase()}; open a new ticket` };
 }
 
 /** Decides what the poller does with a ticket in Agent review, before any agent runs. */
