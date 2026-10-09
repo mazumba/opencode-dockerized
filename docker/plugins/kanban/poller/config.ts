@@ -6,7 +6,6 @@ export interface Config {
   timeoutWorkMs: number;
   timeoutReviewMs: number;
   timeoutInvestigateMs: number;
-  reviewRetryMs: number;
   once: boolean;
   dryRun: boolean;
 }
@@ -43,7 +42,6 @@ export function loadConfig(env: Record<string, string | undefined>, argv: string
     timeoutWorkMs: positiveNumber(env, "KANBAN_TIMEOUT_WORK", 60) * MINUTE,
     timeoutReviewMs: positiveNumber(env, "KANBAN_TIMEOUT_REVIEW", 20) * MINUTE,
     timeoutInvestigateMs: positiveNumber(env, "KANBAN_TIMEOUT_INVESTIGATE", 20) * MINUTE,
-    reviewRetryMs: positiveNumber(env, "KANBAN_REVIEW_RETRY", 10) * MINUTE,
     once: flags.includes("--once"),
     dryRun: flags.includes("--dry-run"),
   };

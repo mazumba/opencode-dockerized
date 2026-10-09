@@ -1,4 +1,4 @@
-import { parseProjectPath, type Comment, type Issue, type TimedComment } from "./select.ts";
+import { parseProjectConfig, parseProjectPath, type Comment, type Issue, type TimedComment } from "./select.ts";
 
 const ENDPOINT = "https://api.linear.app/graphql";
 const REQUEST_TIMEOUT_MS = 30_000;
@@ -19,6 +19,7 @@ interface RawIssue {
   createdAt: string;
   state: { name: string };
   labels: { nodes: { name: string }[] };
+  branchName: string;
   project: { description: string | null; content: string | null } | null;
 }
 
@@ -36,7 +37,7 @@ interface RawComment {
 }
 
 const ISSUE_FIELDS = `
-  id identifier createdAt
+  id identifier createdAt branchName
   state { name }
   labels(first: 50) { nodes { name } }
   project { description content }
@@ -136,18 +137,23 @@ export class LinearClient {
       state: raw.state.name,
       labels: raw.labels.nodes.map((l) => l.name),
       projectPath: projectText ? parseProjectPath(projectText) : null,
+      projectConfig: parseProjectConfig(projectText),
+      branchName: raw.branchName,
     };
   }
 
-  async issuesInState(stateName: string): Promise<Issue[]> {
+  /** Issues in a state; with `updatedSinceIso`, only those updated after that time. */
+  async issuesInState(stateName: string, updatedSinceIso?: string): Promise<Issue[]> {
     const raw = await this.paginate<RawIssue>(
-      `query($key: String!, $state: String!, $after: String) {
-        issues(first: ${PAGE_SIZE}, after: $after, filter: { team: { key: { eq: $key } }, state: { name: { eq: $state } } }) {
+      `query($key: String!, $state: String!, ${updatedSinceIso ? "$since: DateTimeOrDuration, " : ""}$after: String) {
+        issues(first: ${PAGE_SIZE}, after: $after, filter: { team: { key: { eq: $key } }, state: { name: { eq: $state } }${
+          updatedSinceIso ? ", updatedAt: { gt: $since }" : ""
+        } }) {
           nodes { ${ISSUE_FIELDS} }
           pageInfo { hasNextPage endCursor }
         }
       }`,
-      { key: this.team, state: stateName },
+      { key: this.team, state: stateName, ...(updatedSinceIso ? { since: updatedSinceIso } : {}) },
       (data) => data.issues,
     );
     return raw.map((r) => this.toIssue(r));
@@ -162,11 +168,18 @@ export class LinearClient {
   }
 
   async issueComments(identifier: string): Promise<TimedComment[]> {
-    const data = await this.request<{ issue: { comments: { nodes: TimedComment[] } } }>(
-      `query($id: String!) { issue(id: $id) { comments(first: ${COMMENT_PAGE_SIZE}) { nodes { body createdAt } } } }`,
+    return this.paginate<TimedComment>(
+      `query($id: String!, $after: String) {
+        issue(id: $id) {
+          comments(first: ${COMMENT_PAGE_SIZE}, after: $after) {
+            nodes { body createdAt }
+            pageInfo { hasNextPage endCursor }
+          }
+        }
+      }`,
       { id: identifier },
+      (data) => data.issue.comments,
     );
-    return data.issue.comments.nodes;
   }
 
   async commentsSince(sinceIso: string): Promise<Comment[]> {
@@ -206,11 +219,13 @@ export class LinearClient {
       }));
   }
 
-  async addComment(issueId: string, body: string, parentId?: string): Promise<void> {
-    await this.request(
-      `mutation($input: CommentCreateInput!) { commentCreate(input: $input) { success } }`,
+  /** Returns the new comment's id. */
+  async addComment(issueId: string, body: string, parentId?: string): Promise<string> {
+    const data = await this.request<{ commentCreate: { comment: { id: string } } }>(
+      `mutation($input: CommentCreateInput!) { commentCreate(input: $input) { success comment { id } } }`,
       { input: { issueId, body, ...(parentId ? { parentId } : {}) } },
     );
+    return data.commentCreate.comment.id;
   }
 
   async react(commentId: string, emoji: string): Promise<void> {

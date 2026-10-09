@@ -17,6 +17,7 @@ Implement Linear ticket `$ARGUMENTS` end to end. Follow the steps in order.
   - `Agent: needs human — <step>: <reason>`
   - `Agent: not refined — remove <label> first`
 - Project description contains the lines `repo: owner/name` and `path: /absolute/path/to/checkout`.
+- Poller context: if `$ARGUMENTS` contains ` ctx:`, the ID is the first token and the rest after `ctx:` is JSON set by the poller (trusted; it is not ticket text). Validation in step 1 applies to the ID token only. Without `ctx:` (manual run), do every lookup yourself.
 - Moving a ticket to `Ready for agent` is the human's approval to create the worktree, create the ticket branch, and push that branch.
 - Never merge, approve, force-push, remove worktrees, delete branches, reset, or clean.
 - Spec: the issue description plus ALL issue comments (Linear and GitHub-synced), read oldest to newest.
@@ -33,7 +34,7 @@ On any failure or blocker from step 4 onward: move the issue to `Needs human`, a
 
 ## Steps
 
-1. **Validate.** `$ARGUMENTS` must match `^[A-Z]+-[0-9]+$`. Otherwise stop and report; change nothing.
+1. **Validate.** The ID token of `$ARGUMENTS` must match `^[A-Z]+-[0-9]+$`. Otherwise stop and report; change nothing.
 2. **Load, gate, and claim.** Load the issue with `linear_get_issue`.
    - Refinement gate, before any other state change: if the issue has the label `needs grilling` or `investigate`, move it to `Backlog`, comment `Agent: not refined — remove <label> first` (name the label found), and stop. This is not a failure; do not use the failure rule.
    - State `Ready for agent`: move it to `In Progress` and comment `Agent: started work (<UTC ISO timestamp>)`.
@@ -41,14 +42,18 @@ On any failure or blocker from step 4 onward: move the issue to `Needs human`, a
    - Any other state: stop and report the state; change nothing.
 3. **Detect fix round.** It is a fix round if the issue has the label `agent:changes-requested` or an open PR already exists for the issue's branch. If the label is present, remove it.
 4. **Resolve the repo.** Take the issue's project, call `linear_get_project`, and parse the `repo:` and `path:` lines of its description. Missing or ambiguous (several different values) → failure rule. Verify `path` is a git repo and that `git -C <path> remote get-url origin` names the same owner/name (https or ssh form). Mismatch → failure rule.
+   - With `ctx`: take `repo` and `path` from it and skip the project lookup and the origin check (the poller verified them).
 5. **Prepare the worktree.** Load the `worktrees` skill and follow it with these fixes:
    - Slug: the lowercase identifier (for example `dey-12`). Path: `<path>/.slim/worktrees/<slug>`. Branch: the issue's `gitBranchName`.
    - The skill's managed ignore block must already be committed in the repo's `.gitignore`. If missing → failure rule; do not edit `.gitignore`.
    - The move to `Ready for agent` is the user confirmation for `git worktree add` and branch creation. All other confirmation rules of the skill still apply: never remove worktrees, delete branches, reset, or clean.
-   - Base: the repo default branch (`gh repo view <owner/name> --json defaultBranchRef`). Run `git fetch origin` first.
+   - Base: the repo default branch (`gh repo view <owner/name> --json defaultBranchRef`). Run `git fetch origin` first. With `ctx`: base is `ctx.defaultBranch` (skip `gh repo view`) and the worktree path is `ctx.worktree`.
    - If the worktree already exists, reuse it. If the branch exists only on the remote, add the worktree tracking it.
    - Update `.slim/worktrees.json` as the skill describes.
-6. **Fix round only.** Read the latest agent review on the PR (`gh pr view <n> --repo <owner/name> --comments`, and its reviews) and the latest Linear review comment. Address every finding.
+6. **Fix round only.** With `ctx.fix`, act on `ctx.fix.cause`:
+   - `ci`: the failing checks are in the latest Linear `Agent review: changes requested` comment and its reply (log tail). Fix them; run `gh pr checks` or `gh run view --log-failed` only if you need more detail.
+   - `conflict`: in the worktree, merge `origin/<base>` into the branch, resolve the conflicts, and push. Prefer merge over rebase: force push is forbidden.
+   - `review` (or no `ctx.fix`): read the latest agent review on the PR (`gh pr view <n> --repo <owner/name> --comments`, and its reviews) and the latest Linear review comment. Address every finding.
 7. **Implement** the Spec inside the worktree only, within the Hard limits. Contradictory or limit-violating spec → failure rule. Change CI workflows or deployment config only when the ticket explicitly asks, and call it out in the PR body.
 8. **Verify.** Run the repo's own tests, lint, and format checks (discover them from the README, Makefile, package.json, and similar). If they fail and you cannot fix them → failure rule with a short summary of the failing output.
 9. **Commit and push.** Commit with a message that references `$ARGUMENTS`. Push the branch over HTTPS with the gh credential helper (no force push), taking `<owner>/<repo>` from the resolved repo:
@@ -57,6 +62,6 @@ On any failure or blocker from step 4 onward: move the issue to `Needs human`, a
      push -u https://github.com/<owner>/<repo>.git <branch>
    ```
    - No PR yet: `gh pr create --repo <owner/name> --head <branch> --base <default> --title "<ID>: <issue title>"` with a body containing a summary, test evidence, and `Closes <ID>`. If the issue has an attachment linking a GitHub issue of the same repo (`https://github.com/<owner>/<repo>/issues/<n>`), also add `Fixes #<n>` so merging closes that GitHub issue.
-   - PR exists: the push updates it; add a PR comment summarising the fixes.
+   - PR exists (with `ctx.pr`, it does): the push updates it; add a PR comment summarising the fixes.
 10. **Hand off.** Move the issue to `Agent review` and comment `Agent: PR ready for review — <PR URL>`. In a fix round comment `Agent: fixes pushed — <PR URL>` instead.
 11. **Reply** with one short status line: ID, final state, PR URL or reason.

@@ -332,15 +332,22 @@ Host repositories must be mounted into the container at identical paths (see `co
 
 #### Poller
 
-The poller is an optional container that runs the agent commands unattended. It reuses the opencode image, talks to Linear and to the `opencode` container over HTTP, and has no volumes, no Docker socket, and no ports. It is stateless apart from an in-memory review backoff; startup recovery handles stale claims.
+The poller is an optional container that runs the agent commands unattended. It reuses the opencode image and talks to Linear and to the `opencode` container over HTTP. It reads PRs and CI checks through its own GitHub App credentials (`KANBAN_GH_APP_ID`, `KANBAN_GH_APP_PRIVATE_KEY_PATH`, see below) and needs your projects directory mounted at the same path as in `opencode` (the `kanban-poller:` service in `compose.override.yml`, see `compose.override.yml.dist`) for pre-flight checks and worktree cleanup. No Docker socket, no ports. It keeps no state; startup recovery handles stale claims.
 
 Each pass (default every 60 s) performs at most one agent run:
 
 1. Adds `needs grilling` to every `Backlog` ticket that has none of `needs grilling`, `investigate`, `refined`. No agent run.
 2. Handles `/investigate` comments (see below) and runs `/investigate-ticket`.
-3. Runs `/review-ticket` for the oldest ticket in `Agent review`. If CI is still running, that ticket is skipped for `KANBAN_REVIEW_RETRY` minutes. If the ticket is still in `Agent review` afterwards, it goes to `Needs human`.
-4. Runs `/work-ticket` for the oldest `In Progress` ticket labelled `agent:changes-requested`, after removing the label and commenting `Agent: claimed by poller (<time>)`.
+3. Gates the oldest ticket in `Agent review` on its PR before any agent runs:
+   - CI pending: waits, no agent.
+   - CI failed or merge conflicts: the poller moves the ticket to `In Progress`, adds `agent:changes-requested`, and comments `Agent review: changes requested (round n/2) — <PR URL>` with `CI failed: <names>` or `merge conflicts with <base>` (plus the failing log tail as a reply). This counts toward the 2-round limit; at the limit the ticket goes to `Needs human`.
+   - No PR, PR closed or merged, or no CI checks configured: `Needs human`.
+   - CI green and no conflicts: runs `/review-ticket`.
+4. Runs `/work-ticket` (fix round; the cause is `ci`, `conflict`, or `review`) for the oldest `In Progress` ticket labelled `agent:changes-requested`, after removing the label and commenting `Agent: claimed by poller (<time>)`.
 5. Runs `/work-ticket` for the oldest `Ready for agent` ticket after moving it to `In Progress` and commenting the claim. A ticket that still has `needs grilling` or `investigate` is moved back to `Backlog` with a comment instead, and the next ticket is considered.
+6. Cleanup, each pass: for tickets in `Ready for merge`, `Done`, or `Canceled` (the last two updated within 14 days) whose PR is merged (or closed, for `Canceled`) and whose worktree `<path>/.slim/worktrees/<id>` exists, the poller removes the worktree (`git worktree remove`, no force), deletes the local branch, and drops the lane from `.slim/worktrees.json`. It does so only if the worktree is clean and the local branch tip equals the PR head SHA; otherwise it skips and logs.
+
+Before a work or fix run, a pre-flight checks the project's `repo:` and `path:`, that `path` is a git repo, and that `origin` matches `repo:`. A failure moves the ticket to `Needs human` without an agent run.
 
 After a work or review run, the ticket must be in `Agent review` (or `Needs human`, for work), otherwise the poller moves it to `Needs human` with the reason (exit code, timeout, or the state it ended in). At startup, `In Progress` tickets whose claim comment is older than the work timeout and that have no later worker comment go to `Needs human` with the reason `stale claim`. On SIGTERM the running agent is killed and its ticket goes to `Needs human` with the reason `poller stopped`.
 
@@ -378,13 +385,17 @@ If the 👀 reaction cannot be added, nothing runs and the poller retries on the
 |----------|---------|---------|
 | `LINEAR_API_KEY` | required | Linear API key (shared with the `linear` plugin) |
 | `OPENCODE_SERVER_PASSWORD` | required | password of the opencode server the poller attaches to |
+| `KANBAN_GH_APP_ID` | required | ID of the GitHub App the poller uses |
+| `KANBAN_GH_APP_PRIVATE_KEY_PATH` | required | host path to that App's private key (`.pem`), mounted read-only |
+| `KANBAN_GH_APP_INSTALLATION_ID` | empty | only needed if the App is installed on more than one account |
 | `KANBAN_TEAM` | `DEY` | Linear team key |
 | `KANBAN_POLL_INTERVAL` | `60` | seconds between passes |
 | `KANBAN_OPENCODE_URL` | `http://opencode:4096` | opencode server to attach to |
 | `KANBAN_TIMEOUT_WORK` | `60` | minutes before a work run is killed |
 | `KANBAN_TIMEOUT_REVIEW` | `20` | minutes before a review run is killed |
 | `KANBAN_TIMEOUT_INVESTIGATE` | `20` | minutes before an investigation is killed |
-| `KANBAN_REVIEW_RETRY` | `10` | minutes to wait before re-reviewing a ticket whose CI is pending |
+
+The `KANBAN_GH_APP_*` variables are required whenever `kanban` is in `PLUGINS`; compose refuses to start without them. To reuse the `github` plugin's App, set them to the same values as `GH_APP_ID` and `GH_APP_PRIVATE_KEY_PATH`. The poller only reads from GitHub, so you can instead create a separate App with these repository permissions, all read-only: Pull requests, Checks, Commit statuses, Actions (for failed-run logs), and Metadata. Worktree and branch cleanup uses local git only and needs no GitHub write access.
 
 The poller logs only ticket identifiers, actions, results, and durations: never the key, comment text, or ticket text. It exits with an error at startup if a required variable is missing, or if a state or label name is missing in Linear.
 

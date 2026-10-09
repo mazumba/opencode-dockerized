@@ -5,3 +5,8 @@ services:
       - /full/path/to/my/projects:/full/path/to/my/projects
 #     Mount your auth.json file here, if you have one:
       - ./.opencode/share/auth.json:/home/opencode/.local/share/opencode/auth.json
+
+  # Same projects path as opencode: needed for pre-flight checks and worktree cleanup.
+  kanban-poller:
+    volumes:
+      - /full/path/to/my/projects:/full/path/to/my/projects
