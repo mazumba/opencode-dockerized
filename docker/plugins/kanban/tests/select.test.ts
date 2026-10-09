@@ -9,14 +9,12 @@ import {
   investigateBlocker,
   investigateRequests,
   investigationOutcome,
-  isBackedOff,
   parseInvestigate,
   parseProjectPath,
-  pickFix,
-  pickReview,
+  fixCandidates,
   readyCandidates,
   refinementLabel,
-  setBackoff,
+  reviewCandidates,
   staleClaims,
   type Comment,
   type Issue,
@@ -100,24 +98,12 @@ describe("investigateBlocker", () => {
 });
 
 describe("candidate selection", () => {
-  test("review picks the oldest, skipping backed-off tickets until expiry", () => {
-    const backoff = new Map<string, number>();
-    expect(pickReview(allIssues, backoff, NOW)?.id).toBe("id-1");
-    setBackoff(backoff, "id-1", NOW, 10 * 60_000);
-    expect(pickReview(allIssues, backoff, NOW + 5 * 60_000)?.id).toBe("id-2");
-    expect(pickReview(allIssues, backoff, NOW + 10 * 60_000)?.id).toBe("id-1");
-    expect(backoff.has("id-1")).toBe(false);
-  });
-  test("review returns null when everything is backed off", () => {
-    const backoff = new Map([["id-1", NOW + 1000], ["id-2", NOW + 1000]]);
-    expect(pickReview(allIssues, backoff, NOW)).toBeNull();
-  });
-  test("isBackedOff is false for unknown tickets", () => {
-    expect(isBackedOff(new Map(), "x", NOW)).toBe(false);
+  test("review returns all Agent review tickets, oldest first", () => {
+    expect(ids(reviewCandidates(allIssues))).toEqual(["id-1", "id-2"]);
   });
   test("fix picks In Progress with the changes-requested label only", () => {
-    expect(pickFix(allIssues)?.id).toBe("id-3");
-    expect(pickFix(allIssues.filter((i) => i.id !== "id-3"))).toBeNull();
+    expect(ids(fixCandidates(allIssues))).toEqual(["id-3"]);
+    expect(fixCandidates(allIssues.filter((i) => i.id !== "id-3"))).toEqual([]);
   });
   test("ready candidates are oldest first and labelled ones are detectable", () => {
     const ready = readyCandidates(allIssues);
@@ -162,8 +148,8 @@ describe("loadConfig", () => {
     expect(config.once).toBe(false);
   });
   test("parses flags and overrides", () => {
-    const config = loadConfig({ ...env, KANBAN_TEAM: "ABC", KANBAN_REVIEW_RETRY: "5" }, ["--once", "--dry-run"]);
-    expect(config).toMatchObject({ team: "ABC", reviewRetryMs: 300_000, once: true, dryRun: true });
+    const config = loadConfig({ ...env, KANBAN_TEAM: "ABC" }, ["--once", "--dry-run"]);
+    expect(config).toMatchObject({ team: "ABC", once: true, dryRun: true });
   });
   test("fails fast on missing env, bad numbers, and unknown flags", () => {
     expect(() => loadConfig({ OPENCODE_SERVER_PASSWORD: "p" }, [])).toThrow(ConfigError);

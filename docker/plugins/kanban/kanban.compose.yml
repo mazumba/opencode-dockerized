@@ -2,8 +2,11 @@
 # Tags the opencode image so the poller service can reuse it, and defines the
 # optional kanban-poller service (profile "kanban-poller"; start it with
 # `make kanban-poller-run`). The poller talks to the opencode container and to
-# Linear only: no volumes, no Docker socket, no ports. Its entrypoint bypasses
-# the image entrypoint and plugin hooks, so no GitHub credentials are needed.
+# Linear, and uses its own GitHub App credentials (KANBAN_GH_APP_*, mapped to
+# the GH_APP_* names gh-app-token reads) for read-only PR and CI checks. It
+# needs the project checkouts mounted (compose.override.yml, same path as
+# opencode) for pre-flight checks and worktree cleanup. No Docker socket, no
+# ports. Its entrypoint bypasses the image entrypoint and plugin hooks.
 services:
   opencode:
     image: opencode-dockerized-opencode:local
@@ -18,7 +21,11 @@ services:
     restart: unless-stopped
     depends_on:
       - opencode
+    volumes:
+      - ${KANBAN_GH_APP_PRIVATE_KEY_PATH:?KANBAN_GH_APP_PRIVATE_KEY_PATH is not set. Set it in .env (see README "Kanban plugin")}:/run/secrets/github-app.pem:ro
     environment:
+      GH_APP_ID: ${KANBAN_GH_APP_ID:?KANBAN_GH_APP_ID is not set. Set it in .env (see README "Kanban plugin")}
+      GH_APP_INSTALLATION_ID: ${KANBAN_GH_APP_INSTALLATION_ID:-}
       LINEAR_API_KEY: ${LINEAR_API_KEY:?LINEAR_API_KEY is not set. Set it in .env (see README "Linear plugin")}
       OPENCODE_SERVER_PASSWORD: ${OPENCODE_SERVER_PASSWORD:?OPENCODE_SERVER_PASSWORD is not set. Set it in .env}
       KANBAN_TEAM: ${KANBAN_TEAM:-DEY}
@@ -27,4 +34,3 @@ services:
       KANBAN_TIMEOUT_WORK: ${KANBAN_TIMEOUT_WORK:-60}
       KANBAN_TIMEOUT_REVIEW: ${KANBAN_TIMEOUT_REVIEW:-20}
       KANBAN_TIMEOUT_INVESTIGATE: ${KANBAN_TIMEOUT_INVESTIGATE:-20}
-      KANBAN_REVIEW_RETRY: ${KANBAN_REVIEW_RETRY:-10}
