@@ -1,14 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import issues from "./fixtures/issues.json";
 import comments from "./fixtures/comments.json";
-import claims from "./fixtures/claims.json";
 import { loadConfig, ConfigError } from "../poller/config.ts";
 import { buildArgs } from "../poller/runner.ts";
 import {
   autoLabelTargets,
-  investigateBlocker,
+  addLane,
   investigateRequests,
   investigationOutcome,
+  investigatorMessage,
   parseInvestigate,
   parseProjectPath,
   fixCandidates,
@@ -16,8 +16,11 @@ import {
   refinementLabel,
   reviewCandidates,
   staleClaims,
+  viewerClaimReactionIds,
+  worktreePlan,
   type Comment,
   type Issue,
+  type IssueReaction,
 } from "../poller/select.ts";
 
 const NOW = Date.parse("2026-10-08T12:00:00Z");
@@ -75,25 +78,34 @@ describe("investigateRequests", () => {
 
 describe("investigationOutcome", () => {
   const ok = { exitCode: 0, timedOut: false, aborted: false, minutes: 3 };
-  test("success needs exit 0 and swapped labels", () => {
-    expect(investigationOutcome(ok, true)).toEqual({ emoji: "white_check_mark" });
+  const START = Date.parse("2026-10-08T12:00:00Z");
+  const note = (body: string, createdAt = "2026-10-08T12:05:00Z") => ({ body, createdAt });
+  test("success needs exit 0 and a fresh `Agent investigation:` comment", () => {
+    expect(investigationOutcome(ok, [note("Agent investigation: found it")], START)).toEqual({ emoji: "white_check_mark" });
+    expect(investigationOutcome(ok, [note("Agent investigation: x", "2026-10-08T12:00:00Z")], START)).toEqual({ emoji: "white_check_mark" });
   });
   test("failures map to x with a reason, most specific first", () => {
-    expect(investigationOutcome({ ...ok, aborted: true }, true)).toEqual({ emoji: "x", reason: "poller stopped" });
-    expect(investigationOutcome({ ...ok, timedOut: true, exitCode: null }, false)).toEqual({ emoji: "x", reason: "timeout after 3 min" });
-    expect(investigationOutcome({ ...ok, exitCode: 2 }, true)).toEqual({ emoji: "x", reason: "exit code 2" });
-    expect(investigationOutcome(ok, false)).toEqual({ emoji: "x", reason: "label not changed" });
+    const comments = [note("Agent investigation: found it")];
+    expect(investigationOutcome({ ...ok, aborted: true }, comments, START)).toEqual({ emoji: "x", reason: "poller stopped" });
+    expect(investigationOutcome({ ...ok, timedOut: true, exitCode: null }, comments, START)).toEqual({ emoji: "x", reason: "timeout after 3 min" });
+    expect(investigationOutcome({ ...ok, exitCode: 2 }, comments, START)).toEqual({ emoji: "x", reason: "exit code 2" });
+  });
+  const noComment = { emoji: "x", reason: "no investigation comment posted" };
+  test("no comment, an older comment, a `failed` comment, or an unrelated comment is a failure", () => {
+    expect(investigationOutcome(ok, [], START)).toEqual(noComment);
+    expect(investigationOutcome(ok, [note("Agent investigation: old", "2026-10-08T11:59:59Z")], START)).toEqual(noComment);
+    expect(investigationOutcome(ok, [note("Agent investigation: failed — timeout")], START)).toEqual(noComment);
+    expect(investigationOutcome(ok, [note("Looks fine to me")], START)).toEqual(noComment);
   });
 });
 
-describe("investigateBlocker", () => {
-  const byId = (id: string) => allIssues.find((i) => i.id === id)!;
-  test("Backlog with investigate label is allowed", () => {
-    expect(investigateBlocker(byId("id-11"))).toBeNull();
+describe("investigatorMessage", () => {
+  const project = { identifier: "DEY-9", repo: "o/r", path: "/repo" };
+  test("single ctx line without a question", () => {
+    expect(investigatorMessage(project, "")).toBe('DEY-9 ctx:{"repo":"o/r","path":"/repo"}');
   });
-  test("wrong state and missing label are blocked", () => {
-    expect(investigateBlocker(byId("id-1"))).toContain("Agent review");
-    expect(investigateBlocker(byId("id-10"))).toContain("investigate");
+  test("question follows on the next line, verbatim", () => {
+    expect(investigatorMessage(project, "Why?\nMore")).toBe('DEY-9 ctx:{"repo":"o/r","path":"/repo"}\nWhy?\nMore');
   });
 });
 
@@ -119,9 +131,99 @@ describe("autoLabelTargets", () => {
 });
 
 describe("staleClaims", () => {
-  const entries = Object.values(claims) as { issue: Issue; comments: { body: string; createdAt: string }[] }[];
-  test("only old claims without a later worker comment are stale", () => {
-    expect(ids(staleClaims(entries, NOW, WORK_TIMEOUT_MS))).toEqual(["id-21", "id-24"]);
+  const VIEWER = "viewer";
+  const reaction = (over: Partial<IssueReaction> = {}): IssueReaction => ({
+    id: "r",
+    emoji: "eyes",
+    userId: VIEWER,
+    createdAt: "2026-10-08T09:00:00Z",
+    ...over,
+  });
+  const issue = (id: string, reactions: IssueReaction[], state = "In Progress"): Issue => ({
+    id,
+    identifier: "DEY-1",
+    createdAt: "2026-10-01T00:00:00Z",
+    state,
+    labels: [],
+    projectPath: "/repo",
+    projectConfig: { repo: "o/r", path: "/repo" },
+    branchName: "b",
+    reactions,
+  });
+  const stale = (...issues: Issue[]) => ids(staleClaims(issues, VIEWER, NOW, WORK_TIMEOUT_MS));
+
+  const cases: [string, Issue, boolean][] = [
+    ["old viewer claim", issue("old", [reaction()]), true],
+    ["fresh viewer claim", issue("fresh", [reaction({ createdAt: "2026-10-08T11:30:00Z" })]), false],
+    ["exactly at the timeout", issue("edge", [reaction({ createdAt: "2026-10-08T11:00:00Z" })]), false],
+    ["no reactions", issue("none", []), false],
+    ["only someone else's claim", issue("other", [reaction({ userId: "someone" })]), false],
+    ["only other emoji", issue("emoji", [reaction({ emoji: "x" })]), false],
+    ["latest claim is fresh", issue("renewed", [reaction({ id: "a" }), reaction({ id: "b", createdAt: "2026-10-08T11:50:00Z" })]), false],
+    ["latest claim is old", issue("both-old", [reaction({ id: "a", createdAt: "2026-10-08T08:00:00Z" }), reaction({ id: "b" })]), true],
+    ["not In Progress", issue("review", [reaction()], "Agent review"), false],
+  ];
+  test.each(cases)("%s", (_name, candidate, expected) => {
+    expect(stale(candidate)).toEqual(expected ? [candidate.id] : []);
+  });
+
+  test("viewerClaimReactionIds returns only the viewer's claim reactions", () => {
+    const target = issue("x", [
+      reaction({ id: "a" }),
+      reaction({ id: "b", userId: "someone" }),
+      reaction({ id: "c", emoji: "x" }),
+      reaction({ id: "d" }),
+    ]);
+    expect(viewerClaimReactionIds(target, VIEWER)).toEqual(["a", "d"]);
+  });
+});
+
+describe("worktreePlan", () => {
+  const facts = { worktreeExists: false, localBranch: false, remoteBranch: false, defaultBranch: "main", branch: "max/dey-9" };
+  const cases: [string, Partial<typeof facts>, unknown][] = [
+    ["worktree exists", { worktreeExists: true, localBranch: true, remoteBranch: true }, { kind: "reuse" }],
+    ["local branch", { localBranch: true }, { kind: "existing-local", branch: "max/dey-9" }],
+    ["local and remote branch prefers local", { localBranch: true, remoteBranch: true }, { kind: "existing-local", branch: "max/dey-9" }],
+    ["remote branch only", { remoteBranch: true }, { kind: "track", branch: "max/dey-9" }],
+    ["neither", {}, { kind: "new", branch: "max/dey-9", base: "origin/main" }],
+    ["neither, other default", { defaultBranch: "develop" }, { kind: "new", branch: "max/dey-9", base: "origin/develop" }],
+  ];
+  test.each(cases)("%s", (_name, over, expected) => expect(worktreePlan({ ...facts, ...over })).toEqual(expected));
+});
+
+describe("addLane", () => {
+  const NOW_ISO = "2026-10-09T10:00:00.000Z";
+  const lane = { slug: "dey-9", branch: "max/dey-9", base: "main", purpose: "ticket DEY-9" };
+  const expectedLane = {
+    slug: "dey-9",
+    branch: "max/dey-9",
+    path: ".slim/worktrees/dey-9",
+    base: "main",
+    purpose: "ticket DEY-9",
+    owner: "kanban-poller",
+    status: "active",
+    areas: [],
+    createdAt: NOW_ISO,
+  };
+  test("creates a registry when none exists", () => {
+    expect(addLane(null, lane, NOW_ISO)).toEqual({ version: "1.0.0", updatedAt: NOW_ISO, lanes: [expectedLane] });
+  });
+  test("appends and keeps other lanes and unknown fields", () => {
+    const registry = { version: "1.0.0", updatedAt: "old", extra: 1, lanes: [{ slug: "other", path: ".slim/worktrees/other" }] };
+    expect(addLane(registry, lane, NOW_ISO)).toEqual({
+      ...registry,
+      updatedAt: NOW_ISO,
+      lanes: [registry.lanes[0], expectedLane],
+    });
+    expect(registry.lanes).toHaveLength(1);
+  });
+  test("is idempotent when the lane exists", () => {
+    const registry = { version: "1.0.0", updatedAt: "old", lanes: [{ slug: "dey-9" }] };
+    expect(addLane(registry, lane, NOW_ISO)).toBe(registry);
+  });
+  test("returns null for a malformed registry", () => {
+    expect(addLane({ lanes: "x" }, lane, NOW_ISO)).toBeNull();
+    expect(addLane("x", lane, NOW_ISO)).toBeNull();
   });
 });
 

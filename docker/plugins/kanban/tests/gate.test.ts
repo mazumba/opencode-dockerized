@@ -5,6 +5,7 @@ import {
   changesRequestedRounds,
   cleanupCandidate,
   fixCandidates,
+  issueProject,
   issueTarget,
   latestFixRequest,
   originMatchesRepo,
@@ -149,6 +150,7 @@ describe("issueTarget and messages", () => {
     projectPath: "/repo",
     projectConfig: { repo: "o/r", path: "/repo" },
     branchName: "max/dey-9-thing",
+    reactions: [],
   };
   const target = issueTarget(issue);
   if ("error" in target) throw new Error("unexpected");
@@ -158,6 +160,12 @@ describe("issueTarget and messages", () => {
     expect("error" in issueTarget({ ...issue, identifier: "dey-9" })).toBe(true);
     expect("error" in issueTarget({ ...issue, branchName: "--upload-pack=x" })).toBe(true);
     expect("error" in issueTarget({ ...issue, branchName: "" })).toBe(true);
+  });
+
+  test("issueProject needs repo and path but no branch", () => {
+    expect(issueProject({ ...issue, branchName: "" })).toEqual({ repo: "o/r", path: "/repo", identifier: "DEY-9" });
+    expect(issueProject({ ...issue, projectConfig: { error: "nope" } })).toEqual({ error: "nope" });
+    expect("error" in issueProject({ ...issue, identifier: "dey-9" })).toBe(true);
   });
 
   test("worker message is a single line with the documented shape", () => {

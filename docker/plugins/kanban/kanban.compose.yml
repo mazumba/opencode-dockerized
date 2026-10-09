@@ -3,9 +3,10 @@
 # optional kanban-poller service (profile "kanban-poller"; start it with
 # `make kanban-poller-run`). The poller talks to the opencode container and to
 # Linear, and uses its own GitHub App credentials (KANBAN_GH_APP_*, mapped to
-# the GH_APP_* names gh-app-token reads) for read-only PR and CI checks. It
-# needs the project checkouts mounted (compose.override.yml, same path as
-# opencode) for pre-flight checks and worktree cleanup. No Docker socket, no
+# the GH_APP_* names gh-app-token reads) for read-only PR and CI checks and for
+# git fetch (contents:read). It needs the project checkouts mounted
+# (compose.override.yml, same path as opencode) for pre-flight checks,
+# worktree creation, and worktree cleanup. No Docker socket, no
 # ports. Its entrypoint bypasses the image entrypoint and plugin hooks.
 services:
   opencode:

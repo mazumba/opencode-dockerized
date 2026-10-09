@@ -20,8 +20,7 @@ export const LABEL = {
 } as const;
 
 export const INVESTIGATE_PREFIX = "Agent investigation:";
-export const CLAIM_PREFIX = "Agent: claimed by poller (";
-const WORKER_DONE_PREFIXES = ["Agent: PR ready", "Agent: fixes pushed", "Agent: needs human"];
+export const INVESTIGATE_FAILED_PREFIX = "Agent investigation: failed";
 
 export const INVESTIGATE_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -35,11 +34,18 @@ export interface Issue {
   projectConfig: ProjectConfigResult;
   /** Linear's suggested git branch name for the ticket. */
   branchName: string;
+  /** Reactions on the issue itself (not on its comments). */
+  reactions: IssueReaction[];
 }
 
 export interface Reaction {
   emoji: string;
   userId: string | null;
+}
+
+export interface IssueReaction extends Reaction {
+  id: string;
+  createdAt: string;
 }
 
 export const REACTION = {
@@ -128,20 +134,27 @@ export type InvestigationOutcome =
   | { emoji: typeof REACTION.done }
   | { emoji: typeof REACTION.failed; reason: string };
 
-/** Final reaction (and failure reason) for an investigation that was claimed and run. */
-export function investigationOutcome(run: InvestigationRun, labelsSwapped: boolean): InvestigationOutcome {
+/**
+ * Final reaction (and failure reason) for an investigation that was claimed and run.
+ * Success = the run ended normally with exit 0 and the agent left an `Agent investigation:`
+ * comment (not the `failed` form) on the ticket at or after `startedAtMs`.
+ */
+export function investigationOutcome(
+  run: InvestigationRun,
+  issueComments: TimedComment[],
+  startedAtMs: number,
+): InvestigationOutcome {
   if (run.aborted) return { emoji: REACTION.failed, reason: "poller stopped" };
   if (run.timedOut) return { emoji: REACTION.failed, reason: `timeout after ${run.minutes} min` };
   if (run.exitCode !== 0) return { emoji: REACTION.failed, reason: `exit code ${run.exitCode}` };
-  if (!labelsSwapped) return { emoji: REACTION.failed, reason: "label not changed" };
+  const reported = issueComments.some(
+    (c) =>
+      c.body.startsWith(INVESTIGATE_PREFIX) &&
+      !c.body.startsWith(INVESTIGATE_FAILED_PREFIX) &&
+      Date.parse(c.createdAt) >= startedAtMs,
+  );
+  if (!reported) return { emoji: REACTION.failed, reason: "no investigation comment posted" };
   return { emoji: REACTION.done };
-}
-
-/** Why an issue cannot be investigated, or null if it can. */
-export function investigateBlocker(issue: Issue): string | null {
-  if (issue.state !== STATE.backlog) return `ticket is in ${issue.state}, not ${STATE.backlog}`;
-  if (!issue.labels.includes(LABEL.investigate)) return `ticket has no ${LABEL.investigate} label`;
-  return null;
 }
 
 /** Issues in Agent review, oldest first. */
@@ -176,29 +189,26 @@ export function autoLabelTargets(issues: Issue[]): Issue[] {
   );
 }
 
+/** Ids of the viewer's claim reactions on an issue. */
+export function viewerClaimReactionIds(issue: Issue, viewerId: string): string[] {
+  return issue.reactions
+    .filter((r) => r.emoji === REACTION.claimed && r.userId === viewerId)
+    .map((r) => r.id);
+}
+
 /**
- * In Progress issues whose latest poller claim is older than `timeoutMs` and
- * has no later worker comment (PR ready, fixes pushed, needs human).
+ * In Progress issues whose latest claim reaction by the viewer is older than `timeoutMs`.
+ * Without a viewer claim reaction an issue is not stale.
  */
-export function staleClaims(
-  inProgress: { issue: Issue; comments: TimedComment[] }[],
-  now: number,
-  timeoutMs: number,
-): Issue[] {
-  return inProgress
-    .filter(({ issue, comments }) => {
-      if (issue.state !== STATE.inProgress) return false;
-      const sorted = byCreatedAt(comments);
-      const claimIndex = sorted.map((c) => c.body.startsWith(CLAIM_PREFIX)).lastIndexOf(true);
-      if (claimIndex === -1) return false;
-      const claim = sorted[claimIndex];
-      if (now - Date.parse(claim.createdAt) <= timeoutMs) return false;
-      const workerReplied = sorted
-        .slice(claimIndex + 1)
-        .some((c) => WORKER_DONE_PREFIXES.some((p) => c.body.startsWith(p)));
-      return !workerReplied;
-    })
-    .map(({ issue }) => issue);
+export function staleClaims(issues: Issue[], viewerId: string, now: number, timeoutMs: number): Issue[] {
+  return issues.filter((issue) => {
+    if (issue.state !== STATE.inProgress) return false;
+    const claimTimes = issue.reactions
+      .filter((r) => r.emoji === REACTION.claimed && r.userId === viewerId)
+      .map((r) => Date.parse(r.createdAt));
+    if (claimTimes.length === 0) return false;
+    return now - Math.max(...claimTimes) > timeoutMs;
+  });
 }
 
 function singleField(text: string, key: string, accept: (value: string) => boolean): string | null {
@@ -243,21 +253,36 @@ export const isIdentifier = (value: string): boolean => IDENTIFIER_PATTERN.test(
 
 /** Worktree directory the worker uses for a ticket. */
 export function worktreePath(path: string, identifier: string): string {
-  if (!isIdentifier(identifier)) throw new Error(`invalid ticket identifier "${identifier}"`);
-  return `${path}/.slim/worktrees/${identifier.toLowerCase()}`;
+  return `${path}/${worktreeRelPath(identifier)}`;
 }
 
-export interface Target extends ProjectConfig {
+/** Worktree directory relative to the project path. */
+export function worktreeRelPath(identifier: string): string {
+  if (!isIdentifier(identifier)) throw new Error(`invalid ticket identifier "${identifier}"`);
+  return `.slim/worktrees/${identifier.toLowerCase()}`;
+}
+
+export interface Project extends ProjectConfig {
   identifier: string;
+}
+
+/** Validated repo and path of a ticket's project (no branch needed), or the reason it has none. */
+export function issueProject(issue: Issue): Project | { error: string } {
+  if (!isIdentifier(issue.identifier)) return { error: "invalid ticket identifier" };
+  if ("error" in issue.projectConfig) return { error: issue.projectConfig.error };
+  return { ...issue.projectConfig, identifier: issue.identifier };
+}
+
+export interface Target extends Project {
   branch: string;
 }
 
 /** Validated repo, path, and branch of a ticket, or the reason it cannot be worked on. */
 export function issueTarget(issue: Issue): Target | { error: string } {
-  if (!isIdentifier(issue.identifier)) return { error: "invalid ticket identifier" };
-  if ("error" in issue.projectConfig) return { error: issue.projectConfig.error };
+  const project = issueProject(issue);
+  if ("error" in project) return project;
   if (!BRANCH_PATTERN.test(issue.branchName ?? "")) return { error: "ticket has no usable branch name" };
-  return { ...issue.projectConfig, identifier: issue.identifier, branch: issue.branchName };
+  return { ...project, branch: issue.branchName };
 }
 
 /** True if a git remote URL (https, scp-style or ssh) points at `owner/name` on github.com. */
@@ -374,6 +399,12 @@ export function workerMessage(target: Target, extra: WorkerContext): string {
   })}`;
 }
 
+/** `<ID> ctx:{"repo","path"}`, plus the question on the following lines when there is one. */
+export function investigatorMessage(project: Project, question: string): string {
+  const first = `${project.identifier} ctx:${JSON.stringify({ repo: project.repo, path: project.path })}`;
+  return question ? `${first}\n${question}` : first;
+}
+
 export interface ReviewerContext {
   base: string;
   pr: { number: number; url: string };
@@ -392,7 +423,7 @@ export function reviewerMessage(target: Target, extra: ReviewerContext): string 
 export interface LaneRegistry {
   version?: unknown;
   updatedAt?: unknown;
-  lanes: { slug?: unknown; path?: unknown }[];
+  lanes: { slug?: unknown; path?: unknown; [key: string]: unknown }[];
   [key: string]: unknown;
 }
 
@@ -408,4 +439,69 @@ export function removeLane(registry: unknown, worktree: string, slug: string, no
   const lanes = current.lanes.filter((l) => l?.path !== worktree && l?.slug !== slug);
   if (lanes.length === current.lanes.length) return null;
   return { ...current, updatedAt: nowIso, lanes };
+}
+
+export interface WorktreeFacts {
+  worktreeExists: boolean;
+  localBranch: boolean;
+  remoteBranch: boolean;
+  defaultBranch: string;
+  branch: string;
+}
+
+export type WorktreePlan =
+  | { kind: "reuse" }
+  | { kind: "existing-local"; branch: string }
+  | { kind: "track"; branch: string }
+  | { kind: "new"; branch: string; base: string };
+
+/** How to get the ticket's worktree: reuse it, check out the local or remote branch, or branch off the default. */
+export function worktreePlan(facts: WorktreeFacts): WorktreePlan {
+  if (facts.worktreeExists) return { kind: "reuse" };
+  if (facts.localBranch) return { kind: "existing-local", branch: facts.branch };
+  if (facts.remoteBranch) return { kind: "track", branch: facts.branch };
+  return { kind: "new", branch: facts.branch, base: `origin/${facts.defaultBranch}` };
+}
+
+export const WORKTREE_OWNER = "kanban-poller";
+
+export interface LaneInput {
+  slug: string;
+  branch: string;
+  base: string;
+  purpose: string;
+}
+
+/**
+ * Registry with the lane added (`updatedAt` refreshed), per the worktrees skill.
+ * A null registry starts a new one. Returns the same registry object if the lane (by slug) exists,
+ * and null if the registry is malformed.
+ */
+export function addLane(registry: unknown, lane: LaneInput, nowIso: string): LaneRegistry | null {
+  if (registry === null) {
+    registry = { version: "1.0.0", updatedAt: nowIso, lanes: [] };
+  }
+  if (typeof registry !== "object" || registry === null || !Array.isArray((registry as LaneRegistry).lanes)) {
+    return null;
+  }
+  const current = registry as LaneRegistry;
+  if (current.lanes.some((l) => l?.slug === lane.slug)) return current;
+  return {
+    ...current,
+    updatedAt: nowIso,
+    lanes: [
+      ...current.lanes,
+      {
+        slug: lane.slug,
+        branch: lane.branch,
+        path: `.slim/worktrees/${lane.slug}`,
+        base: lane.base,
+        purpose: lane.purpose,
+        owner: WORKTREE_OWNER,
+        status: "active",
+        areas: [],
+        createdAt: nowIso,
+      },
+    ],
+  };
 }

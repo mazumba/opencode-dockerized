@@ -1,8 +1,15 @@
 #!/usr/bin/env bun
 // Kanban poller: watches the Linear team board and runs opencode commands
 // (/investigate-ticket, /review-ticket, /work-ticket) unattended.
-// It does the deterministic GitHub and git work itself, so agents start only when needed:
-//   - pre-flight before work: project config (repo + path), checkout exists, origin matches
+// It does the deterministic GitHub, git and status work itself, so agents start only when needed:
+//   - pre-flight before work: project config (repo + path), checkout exists, origin matches,
+//     `.slim/worktrees` is git-ignored
+//   - worktree setup before work and fix runs: fetch, create or reuse `.slim/worktrees/<id>`,
+//     register the lane in `.slim/worktrees.json`
+//   - claims: an eyes reaction by the poller on the ticket (replaces the claim comment); a claim
+//     reaction older than the work timeout marks an In Progress ticket as stale
+//   - /investigate comments run on any ticket (state and labels are not touched); the poller
+//     checks the project config first and reacts eyes (claim), then check or x on the request
 //   - Agent review gate: waits for CI, sends CI failures and merge conflicts back to the worker
 //     (limited rounds), escalates missing/closed PRs, and starts the reviewer only when CI is green
 //   - cleanup: removes the worktree and local branch of merged or canceled tickets, only when
@@ -22,9 +29,10 @@ import {
   REACTION,
   STATE,
   autoLabelTargets,
-  investigateBlocker,
   investigationOutcome,
   investigateRequests,
+  investigatorMessage,
+  issueProject,
   MAX_REVIEW_ROUNDS,
   changesRequestedRounds,
   cleanupCandidate,
@@ -32,6 +40,7 @@ import {
   issueTarget,
   latestFixRequest,
   originMatchesRepo,
+  addLane,
   readyCandidates,
   refinementLabel,
   removeLane,
@@ -39,12 +48,16 @@ import {
   reviewGate,
   reviewerMessage,
   staleClaims,
+  viewerClaimReactionIds,
   workerMessage,
   worktreePath,
+  worktreePlan,
+  worktreeRelPath,
   type Comment,
   type GateDecision,
   type Issue,
   type PrInfo,
+  type Project,
   type Target,
 } from "./select.ts";
 
@@ -115,6 +128,14 @@ async function needsHuman(ctx: Context, issue: Issue, reason: string): Promise<v
   await move(ctx, issue, STATE.needsHuman);
   await comment(ctx, issue, `Agent: needs human — poller: ${reason}`);
   log("needs-human", { ticket: issue.identifier, reason });
+}
+
+/** Replaces the poller's claim reactions on the ticket with a fresh one (the claim marker). */
+async function claim(ctx: Context, issue: Issue): Promise<void> {
+  if (ctx.config.dryRun) return log("dry-run.claim", { ticket: issue.identifier });
+  for (const id of viewerClaimReactionIds(issue, ctx.viewerId)) await ctx.linear.deleteReaction(id);
+  await ctx.linear.reactToIssue(issue.id, REACTION.claimed);
+  log("claimed", { ticket: issue.identifier });
 }
 
 // ── Agent runs ──
@@ -194,26 +215,31 @@ async function stepInvestigate(ctx: Context): Promise<boolean> {
   const comments = await ctx.linear.commentsSince(since);
   for (const { comment: request, question } of investigateRequests(comments, ctx.viewerId, Date.now())) {
     const issue = await ctx.linear.issue(request.issueIdentifier);
-    const blocker = investigateBlocker(issue);
-    if (blocker) {
-      log("investigate.skip", { ticket: issue.identifier });
-      await comment(ctx, issue, `Agent investigation: skipped — ${blocker}`, request.id);
+    const project = issueProject(issue);
+    const blocker = "error" in project ? project.error : await checkoutProblem(ctx, project);
+    if ("error" in project || blocker) {
+      log("investigate.skip", { ticket: issue.identifier, reason: blocker });
+      await comment(ctx, issue, `Agent investigation: failed — ${blocker}`, request.id);
       await react(ctx, request, REACTION.failed);
       continue;
     }
     // The eyes reaction is the claim. Without it the request would run again every pass.
     if (!(await react(ctx, request, REACTION.claimed))) return false;
 
-    const message = question ? `${issue.identifier} ${question}` : issue.identifier;
-    const result = await run(ctx, "investigate", issue, message, ctx.config.timeoutInvestigateMs);
+    const startedAt = Date.now();
+    const result = await run(
+      ctx,
+      "investigate",
+      issue,
+      investigatorMessage(project, question),
+      ctx.config.timeoutInvestigateMs,
+    );
     if (!result) return true;
 
-    const after = await ctx.linear.issue(issue.identifier);
-    const swapped =
-      after.labels.includes(LABEL.needsGrilling) && !after.labels.includes(LABEL.investigate);
     const outcome = investigationOutcome(
       { ...result, minutes: minutes(result.durationMs) },
-      swapped,
+      await ctx.linear.issueComments(issue.identifier),
+      startedAt,
     );
     if (outcome.emoji === REACTION.done) {
       await react(ctx, request, REACTION.done);
@@ -229,19 +255,84 @@ async function stepInvestigate(ctx: Context): Promise<boolean> {
 const oneLine = (text: string) => text.replace(/\s+/g, " ").trim();
 const FENCE = "```";
 
-/** Why the ticket cannot be worked on (config, checkout, origin), as a Target when it can. */
+/** Why the project checkout is unusable (missing, not a git repo, wrong origin), or null. */
+async function checkoutProblem(ctx: Context, project: Project): Promise<string | null> {
+  if (!(await dirExists(project.path))) return `project path ${project.path} does not exist`;
+  try {
+    if (!(await ctx.git.isRepo(project.path))) return `project path ${project.path} is not a git repository`;
+    const origin = await ctx.git.originUrl(project.path);
+    if (!originMatchesRepo(origin, project.repo)) return `origin of ${project.path} does not match ${project.repo}`;
+  } catch (error) {
+    return `git check failed: ${(error as Error).message}`;
+  }
+  return null;
+}
+
+/** Why the ticket cannot be worked on (config, checkout, origin, ignore rules), as a Target when it can. */
 async function preflight(ctx: Context, issue: Issue): Promise<Target | string> {
   const target = issueTarget(issue);
   if ("error" in target) return target.error;
-  if (!(await dirExists(target.path))) return `project path ${target.path} does not exist`;
+  const problem = await checkoutProblem(ctx, target);
+  if (problem) return problem;
   try {
-    if (!(await ctx.git.isRepo(target.path))) return `project path ${target.path} is not a git repository`;
-    const origin = await ctx.git.originUrl(target.path);
-    if (!originMatchesRepo(origin, target.repo)) return `origin of ${target.path} does not match ${target.repo}`;
+    // Probe a path inside the worktree so directory-only ignore patterns match too.
+    if (!(await ctx.git.isIgnored(target.path, `${worktreeRelPath(target.identifier)}/.probe`))) {
+      return `.slim/worktrees is not git-ignored in ${target.path}`;
+    }
   } catch (error) {
     return `git check failed: ${(error as Error).message}`;
   }
   return target;
+}
+
+async function writeRegistry(file: string, registry: unknown): Promise<void> {
+  const temp = `${file}.${process.pid}.tmp`;
+  await writeFile(temp, `${JSON.stringify(registry, null, 2)}\n`);
+  await rename(temp, file);
+}
+
+async function addLaneEntry(target: Target, defaultBranch: string): Promise<void> {
+  const file = `${target.path}/.slim/worktrees.json`;
+  let registry: unknown = null;
+  try {
+    registry = JSON.parse(await readFile(file, "utf8"));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw new GitError("worktree registry unreadable");
+  }
+  const updated = addLane(
+    registry,
+    {
+      slug: target.identifier.toLowerCase(),
+      branch: target.branch,
+      base: defaultBranch,
+      purpose: `ticket ${target.identifier}`,
+    },
+    nowIso(),
+  );
+  if (!updated) throw new GitError("worktree registry malformed");
+  if (updated === registry) return;
+  try {
+    await writeRegistry(file, updated);
+  } catch {
+    throw new GitError("worktree registry not writable");
+  }
+}
+
+/** Fetches, creates or reuses the ticket's worktree, and registers its lane. Throws GitError. */
+async function prepareWorktree(ctx: Context, target: Target, defaultBranch: string): Promise<void> {
+  if (ctx.config.dryRun) return log("dry-run.worktree", { ticket: target.identifier });
+  const worktree = worktreePath(target.path, target.identifier);
+  await ctx.git.fetch(target.path);
+  const plan = worktreePlan({
+    worktreeExists: (await dirExists(worktree)) && (await isRegisteredWorktree(ctx, target.path, worktree)),
+    localBranch: (await ctx.git.revParse(target.path, `refs/heads/${target.branch}`)) !== null,
+    remoteBranch: (await ctx.git.revParse(target.path, `refs/remotes/origin/${target.branch}`)) !== null,
+    defaultBranch,
+    branch: target.branch,
+  });
+  if (plan.kind !== "reuse") await ctx.git.worktreeAdd(target.path, worktree, plan);
+  await addLaneEntry(target, defaultBranch);
+  log("worktree.ready", { ticket: target.identifier, plan: plan.kind });
 }
 
 async function postFixRequest(
@@ -328,6 +419,18 @@ async function stepWork(ctx: Context, issue: Issue, message: string): Promise<vo
   await settle(ctx, issue, result, after, (s) => s === STATE.agentReview || s === STATE.needsHuman);
 }
 
+/** Prepares the worktree; on GitError the ticket goes to Needs human and false is returned. */
+async function setupWorktree(ctx: Context, issue: Issue, target: Target, defaultBranch: string): Promise<boolean> {
+  try {
+    await prepareWorktree(ctx, target, defaultBranch);
+    return true;
+  } catch (error) {
+    if (!(error instanceof GitError)) throw error;
+    await needsHuman(ctx, issue, `worktree setup failed: ${error.message}`);
+    return false;
+  }
+}
+
 async function stepFix(ctx: Context): Promise<boolean> {
   for (const issue of fixCandidates(await ctx.linear.issuesInState(STATE.inProgress))) {
     const target = await preflight(ctx, issue);
@@ -336,11 +439,13 @@ async function stepFix(ctx: Context): Promise<boolean> {
       continue;
     }
     let message: string;
+    let defaultBranch: string;
     try {
       const comments = await ctx.linear.issueComments(issue.identifier);
       const pr = await ctx.gh.findPr(target.repo, target.branch);
+      defaultBranch = await ctx.gh.defaultBranch(target.repo);
       message = workerMessage(target, {
-        defaultBranch: await ctx.gh.defaultBranch(target.repo),
+        defaultBranch,
         pr: pr ? { number: pr.number, url: pr.url } : undefined,
         round: changesRequestedRounds(comments),
         fix: latestFixRequest(comments),
@@ -350,8 +455,9 @@ async function stepFix(ctx: Context): Promise<boolean> {
       log("fix.github-error", { ticket: issue.identifier, message: error.message });
       continue;
     }
+    if (!(await setupWorktree(ctx, issue, target, defaultBranch))) continue;
     await relabel(ctx, issue, { remove: [LABEL.changesRequested] });
-    await comment(ctx, issue, `Agent: claimed by poller (${nowIso()})`);
+    await claim(ctx, issue);
     await stepWork(ctx, issue, message);
     return true;
   }
@@ -373,15 +479,18 @@ async function stepNewWork(ctx: Context): Promise<boolean> {
       continue;
     }
     let message: string;
+    let defaultBranch: string;
     try {
-      message = workerMessage(target, { defaultBranch: await ctx.gh.defaultBranch(target.repo), round: 0 });
+      defaultBranch = await ctx.gh.defaultBranch(target.repo);
+      message = workerMessage(target, { defaultBranch, round: 0 });
     } catch (error) {
       if (!(error instanceof GitHubError)) throw error;
       log("work.github-error", { ticket: issue.identifier, message: error.message });
       continue;
     }
+    if (!(await setupWorktree(ctx, issue, target, defaultBranch))) continue;
     await move(ctx, issue, STATE.inProgress);
-    await comment(ctx, issue, `Agent: claimed by poller (${nowIso()})`);
+    await claim(ctx, issue);
     await stepWork(ctx, issue, message);
     return true;
   }
@@ -400,9 +509,7 @@ async function removeLaneEntry(target: Target, worktree: string): Promise<void> 
   }
   const updated = removeLane(registry, worktree, target.identifier.toLowerCase(), nowIso());
   if (!updated) return log("cleanup.lanes-skip", { ticket: target.identifier, reason: "no matching lane" });
-  const temp = `${file}.${process.pid}.tmp`;
-  await writeFile(temp, `${JSON.stringify(updated, null, 2)}\n`);
-  await rename(temp, file);
+  await writeRegistry(file, updated);
 }
 
 async function isRegisteredWorktree(ctx: Context, path: string, worktree: string): Promise<boolean> {
@@ -468,11 +575,7 @@ async function stepAutoLabel(ctx: Context): Promise<void> {
 
 async function recoverStaleClaims(ctx: Context): Promise<void> {
   const inProgress = await ctx.linear.issuesInState(STATE.inProgress);
-  const withComments = [];
-  for (const issue of inProgress) {
-    withComments.push({ issue, comments: await ctx.linear.issueComments(issue.identifier) });
-  }
-  for (const issue of staleClaims(withComments, Date.now(), ctx.config.timeoutWorkMs)) {
+  for (const issue of staleClaims(inProgress, ctx.viewerId, Date.now(), ctx.config.timeoutWorkMs)) {
     await needsHuman(ctx, issue, "stale claim");
   }
 }

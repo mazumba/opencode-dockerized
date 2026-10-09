@@ -262,10 +262,10 @@ The `kanban` plugin turns a Linear board (team `DEY`) into a work queue. Agents 
 
 | Lane | Moved there by |
 |------|----------------|
-| `Backlog` | human (new tickets); `/work-ticket` when a ticket is not refined |
-| `Ready for agent` | human, after refinement. Counts as approval to create the worktree, the ticket branch, and push that branch |
-| `In Progress` | `/work-ticket` (start); `/review-ticket` (changes requested) |
-| `Agent review` | `/work-ticket` (PR ready or fixes pushed) |
+| `Backlog` | human (new tickets); the poller, when a `Ready for agent` ticket is not refined |
+| `Ready for agent` | human, after refinement. Counts as approval for the poller to create the worktree and ticket branch, and for the worker to push it |
+| `In Progress` | the poller (claim); `/review-ticket` (changes requested) |
+| `Agent review` | `/work-ticket` (PR opened or fixes pushed) |
 | `Ready for merge` | `/review-ticket` (clean review) |
 | `Done` | Linear's GitHub integration, when the human merges the PR |
 | `Needs human` | agents, on any blocker or after 2 review rounds |
@@ -276,17 +276,17 @@ The `kanban` plugin turns a Linear board (team `DEY`) into a work queue. Agents 
 - `needs grilling`: scope is unclear; the human clarifies it with `/grill-ticket`.
 - `investigate`: facts are missing; the human starts `/investigate-ticket`.
 - `refined`: set by `/grill-ticket` when scope and acceptance criteria are agreed.
-- `agent:changes-requested`: set by `/review-ticket`, removed by `/work-ticket` when it starts the fix round.
+- `agent:changes-requested`: set by `/review-ticket`, removed by the poller when it starts the fix round.
 
 `needs grilling` and `investigate` both mean "not refined". `refined` marks a ticket that went through grilling. Only refined tickets go to `Ready for agent`.
 
 **Refinement flow:**
 
 1. A new ticket gets `investigate` or `needs grilling`.
-2. The human runs `/investigate-ticket <ID>`. The agent posts findings and swaps `investigate` for `needs grilling`.
+2. The human comments `/investigate` on the ticket. The agent posts an `Agent investigation:` comment; labels and state stay as they are.
 3. The human runs `/grill-ticket <ID>` in a normal session, agrees on scope and acceptance criteria, and confirms the new description. `needs grilling` is replaced by `refined`.
 4. The human moves the ticket to `Ready for agent` (the commands never change this state).
-5. `/work-ticket` refuses tickets that still carry either label: it moves them back to `Backlog` with a comment.
+5. The poller bounces tickets that still carry either label back to `Backlog`.
 
 Investigation and grilling are always started by the human.
 
@@ -298,10 +298,12 @@ Investigation and grilling are always started by the human.
 
 | Command | Agent | Started by |
 |---------|-------|------------|
-| `/work-ticket <ID>` | `ticket-worker` | human, or an unattended `opencode run --agent ticket-worker --command work-ticket <ID>` |
-| `/review-ticket <ID>` | `ticket-reviewer` | human, or an unattended `opencode run --agent ticket-reviewer --command review-ticket <ID>` |
-| `/investigate-ticket <ID> [question]` | `ticket-investigator` (read-only) | human only: typed in a session, or by commenting `/investigate` on the ticket (see poller) |
+| `/work-ticket <ID> ctx:<json>` | `ticket-worker` | poller only |
+| `/review-ticket <ID> ctx:<json>` | `ticket-reviewer` | poller only |
+| `/investigate-ticket <ID> ctx:<json> [question]` | `ticket-investigator` (read-only) | poller, on a human `/investigate` comment (see below) |
 | `/grill-ticket <ID>` | the primary agent of your current session (interactive) | human only |
+
+`/work-ticket`, `/review-ticket`, and `/investigate-ticket` stop and change nothing when the arguments lack ` ctx:`.
 
 **Linear project format.** Each Linear project maps to one repository. Its description must contain these lines:
 
@@ -316,7 +318,7 @@ Host repositories must be mounted into the container at identical paths (see `co
 
 - [ ] In Linear team `DEY`, create the workflow states listed above and the four labels (`needs grilling`, `investigate`, `refined`, `agent:changes-requested`).
 - [ ] Add `repo:` and `path:` lines to every project description, and mount each checkout at the same path in `compose.override.yml`.
-- [ ] In each repo, commit the managed worktrees block to `.gitignore` (`.slim/worktrees/` and `.slim/worktrees.json` between the `oh-my-opencode-slim worktrees` markers). Agents do not edit `.gitignore`.
+- [ ] In each repo, commit the managed worktrees block to `.gitignore` (`.slim/worktrees/` and `.slim/worktrees.json` between the `oh-my-opencode-slim worktrees` markers). The poller's pre-flight requires `.slim/worktrees/` to be ignored. Agents do not edit `.gitignore`.
 - [ ] If you use Linear's GitHub Issues sync, sync GitHub to Linear only, and set the project on synced tickets before moving them to `Ready for agent`.
 - [ ] Keep the Linear GitHub automation "PR merged moves the ticket to Done" and disable the other PR automations, so only agents move tickets through the middle lanes.
 - [ ] Enable branch protection on `main` that requires a human approval.
@@ -332,26 +334,26 @@ Host repositories must be mounted into the container at identical paths (see `co
 
 #### Poller
 
-The poller is an optional container that runs the agent commands unattended. It reuses the opencode image and talks to Linear and to the `opencode` container over HTTP. It reads PRs and CI checks through its own GitHub App credentials (`KANBAN_GH_APP_ID`, `KANBAN_GH_APP_PRIVATE_KEY_PATH`, see below) and needs your projects directory mounted at the same path as in `opencode` (the `kanban-poller:` service in `compose.override.yml`, see `compose.override.yml.dist`) for pre-flight checks and worktree cleanup. No Docker socket, no ports. It keeps no state; startup recovery handles stale claims.
+The poller is an optional container that runs the agent commands unattended. It reuses the opencode image and talks to Linear and to the `opencode` container over HTTP. It reads PRs and CI checks, and runs `git fetch`, through its own GitHub App credentials (`KANBAN_GH_APP_ID`, `KANBAN_GH_APP_PRIVATE_KEY_PATH`, see below) and needs your projects directory mounted at the same path as in `opencode` (the `kanban-poller:` service in `compose.override.yml`, see `compose.override.yml.dist`) for pre-flight checks, worktree creation, and worktree cleanup. No Docker socket, no ports. It keeps no state; startup recovery handles stale claims.
 
 Each pass (default every 60 s) performs at most one agent run:
 
 1. Adds `needs grilling` to every `Backlog` ticket that has none of `needs grilling`, `investigate`, `refined`. No agent run.
-2. Handles `/investigate` comments (see below) and runs `/investigate-ticket`.
+2. Handles `/investigate` comments (see below) and runs `/investigate-ticket` on any ticket, in any state.
 3. Gates the oldest ticket in `Agent review` on its PR before any agent runs:
    - CI pending: waits, no agent.
    - CI failed or merge conflicts: the poller moves the ticket to `In Progress`, adds `agent:changes-requested`, and comments `Agent review: changes requested (round n/2) — <PR URL>` with `CI failed: <names>` or `merge conflicts with <base>` (plus the failing log tail as a reply). This counts toward the 2-round limit; at the limit the ticket goes to `Needs human`.
    - No PR, PR closed or merged, or no CI checks configured: `Needs human`.
    - CI green and no conflicts: runs `/review-ticket`.
-4. Runs `/work-ticket` (fix round; the cause is `ci`, `conflict`, or `review`) for the oldest `In Progress` ticket labelled `agent:changes-requested`, after removing the label and commenting `Agent: claimed by poller (<time>)`.
-5. Runs `/work-ticket` for the oldest `Ready for agent` ticket after moving it to `In Progress` and commenting the claim. A ticket that still has `needs grilling` or `investigate` is moved back to `Backlog` with a comment instead, and the next ticket is considered.
+4. Runs `/work-ticket` (fix round; the cause is `ci`, `conflict`, or `review`) for the oldest `In Progress` ticket labelled `agent:changes-requested`, after claiming it with a 👀 reaction on the issue, removing the label, and preparing the worktree.
+5. Runs `/work-ticket` for the oldest `Ready for agent` ticket after claiming it with a 👀 reaction on the issue, moving it to `In Progress`, and preparing the worktree. A ticket that still has `needs grilling` or `investigate` is moved back to `Backlog` instead, and the next ticket is considered.
 6. Cleanup, each pass: for tickets in `Ready for merge`, `Done`, or `Canceled` (the last two updated within 14 days) whose PR is merged (or closed, for `Canceled`) and whose worktree `<path>/.slim/worktrees/<id>` exists, the poller removes the worktree (`git worktree remove`, no force), deletes the local branch, and drops the lane from `.slim/worktrees.json`. It does so only if the worktree is clean and the local branch tip equals the PR head SHA; otherwise it skips and logs.
 
-Before a work or fix run, a pre-flight checks the project's `repo:` and `path:`, that `path` is a git repo, and that `origin` matches `repo:`. A failure moves the ticket to `Needs human` without an agent run.
+Before a work or fix run, a pre-flight checks the project's `repo:` and `path:`, that `path` is a git repo, and that `origin` matches `repo:`. It also requires `.slim/worktrees/` to be git-ignored. A failure moves the ticket to `Needs human` without an agent run. After pre-flight, the poller fetches `origin` and creates (or reuses) the worktree `<path>/.slim/worktrees/<id>` on the ticket branch, with its `.slim/worktrees.json` lane; the worker only works inside it.
 
-After a work or review run, the ticket must be in `Agent review` (or `Needs human`, for work), otherwise the poller moves it to `Needs human` with the reason (exit code, timeout, or the state it ended in). At startup, `In Progress` tickets whose claim comment is older than the work timeout and that have no later worker comment go to `Needs human` with the reason `stale claim`. On SIGTERM the running agent is killed and its ticket goes to `Needs human` with the reason `poller stopped`.
+After a work or review run, the ticket must be in `Agent review` (or `Needs human`, for work), otherwise the poller moves it to `Needs human` with the reason (exit code, timeout, or the state it ended in). At startup, `In Progress` tickets whose poller 👀 reaction is older than the work timeout go to `Needs human` with the reason `stale claim`. On SIGTERM the running agent is killed and its ticket goes to `Needs human` with the reason `poller stopped`.
 
-**Investigate comments.** Comment on a ticket in `Backlog` with the label `investigate`:
+**Investigate comments.** Comment on any ticket, in any state, with any labels:
 
 ```text
 /investigate
@@ -363,9 +365,9 @@ The first line must be exactly `/investigate` or start with `/investigate `. Onl
 | Reaction | Meaning |
 |----------|---------|
 | 👀 (`eyes`) | picked up; this is the claim, so the comment is not handled twice |
-| ✅ (`white_check_mark`) | finished: `investigate` was swapped for `needs grilling` |
-| 👀 + ❌ (`x`) | failed (non-zero exit, timeout, labels not swapped, or `poller stopped`); a reply `Agent investigation: failed — <reason>` explains |
-| ❌ (`x`) only | skipped because the ticket is not in `Backlog` or lacks `investigate`; a reply `Agent investigation: skipped — <reason>` explains |
+| ✅ (`white_check_mark`) | finished: a new `Agent investigation:` comment exists |
+| 👀 + ❌ (`x`) | failed (non-zero exit, timeout, no new investigation comment, or `poller stopped`); a reply `Agent investigation: failed — <reason>` explains |
+| ❌ (`x`) only | config check failed before the claim (project `repo:`/`path:` or origin); a reply `Agent investigation: failed — <reason>` explains |
 
 If the 👀 reaction cannot be added, nothing runs and the poller retries on the next pass. Legacy comments that already have a reply starting with `Agent investigation:` count as handled. Reactions by other users are ignored.
 
@@ -395,7 +397,7 @@ If the 👀 reaction cannot be added, nothing runs and the poller retries on the
 | `KANBAN_TIMEOUT_REVIEW` | `20` | minutes before a review run is killed |
 | `KANBAN_TIMEOUT_INVESTIGATE` | `20` | minutes before an investigation is killed |
 
-The `KANBAN_GH_APP_*` variables are required whenever `kanban` is in `PLUGINS`; compose refuses to start without them. To reuse the `github` plugin's App, set them to the same values as `GH_APP_ID` and `GH_APP_PRIVATE_KEY_PATH`. The poller only reads from GitHub, so you can instead create a separate App with these repository permissions, all read-only: Pull requests, Checks, Commit statuses, Actions (for failed-run logs), and Metadata. Worktree and branch cleanup uses local git only and needs no GitHub write access.
+The `KANBAN_GH_APP_*` variables are required whenever `kanban` is in `PLUGINS`; compose refuses to start without them. To reuse the `github` plugin's App, set them to the same values as `GH_APP_ID` and `GH_APP_PRIVATE_KEY_PATH`. The poller only reads from GitHub, so you can instead create a separate App with these repository permissions, all read-only: Contents, Pull requests, Checks, Commit statuses, Actions (for failed-run logs), and Metadata. The same App is used for `git fetch`, so add Contents: read. Worktree and branch cleanup uses local git only and needs no GitHub write access.
 
 The poller logs only ticket identifiers, actions, results, and durations: never the key, comment text, or ticket text. It exits with an error at startup if a required variable is missing, or if a state or label name is missing in Linear.
 

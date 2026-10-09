@@ -20,6 +20,7 @@ interface RawIssue {
   state: { name: string };
   labels: { nodes: { name: string }[] };
   branchName: string;
+  reactions: { id: string; emoji: string; createdAt: string; user: { id: string } | null }[];
   project: { description: string | null; content: string | null } | null;
 }
 
@@ -41,6 +42,7 @@ const ISSUE_FIELDS = `
   state { name }
   labels(first: 50) { nodes { name } }
   project { description content }
+  reactions { id emoji createdAt user { id } }
 `;
 
 export interface Ids {
@@ -139,6 +141,12 @@ export class LinearClient {
       projectPath: projectText ? parseProjectPath(projectText) : null,
       projectConfig: parseProjectConfig(projectText),
       branchName: raw.branchName,
+      reactions: (raw.reactions ?? []).map((r) => ({
+        id: r.id,
+        emoji: r.emoji,
+        createdAt: r.createdAt,
+        userId: r.user?.id ?? null,
+      })),
     };
   }
 
@@ -233,6 +241,17 @@ export class LinearClient {
       `mutation($input: ReactionCreateInput!) { reactionCreate(input: $input) { success } }`,
       { input: { commentId, emoji } },
     );
+  }
+
+  async reactToIssue(issueId: string, emoji: string): Promise<void> {
+    await this.request(
+      `mutation($input: ReactionCreateInput!) { reactionCreate(input: $input) { success } }`,
+      { input: { issueId, emoji } },
+    );
+  }
+
+  async deleteReaction(id: string): Promise<void> {
+    await this.request(`mutation($id: String!) { reactionDelete(id: $id) { success } }`, { id });
   }
 
   async updateIssue(
