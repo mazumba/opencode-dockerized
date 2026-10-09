@@ -6,6 +6,9 @@
 //     `.slim/worktrees` is git-ignored
 //   - worktree setup before work and fix runs: fetch, create or reuse `.slim/worktrees/<id>`,
 //     register the lane in `.slim/worktrees.json`
+//   - follow-up: a Ready for agent ticket whose branch has an open PR gets that PR in the worker ctx
+//     (merged/closed PR: Needs human); review rounds count only since the ticket last entered
+//     Ready for agent, so each human request gets a fresh limit
 //   - claims: an eyes reaction by the poller on the ticket (replaces the claim comment); a claim
 //     reaction older than the work timeout marks an In Progress ticket as stale
 //   - /investigate comments run on any ticket (state and labels are not touched); the poller
@@ -36,6 +39,7 @@ import {
   MAX_REVIEW_ROUNDS,
   changesRequestedRounds,
   cleanupCandidate,
+  existingPrDecision,
   fixCandidates,
   issueTarget,
   latestFixRequest,
@@ -59,6 +63,7 @@ import {
   type PrInfo,
   type Project,
   type Target,
+  type TimedComment,
 } from "./select.ts";
 
 const DEFAULT_OPENCODE_BIN = "/home/opencode/.opencode/bin/opencode";
@@ -322,7 +327,7 @@ async function addLaneEntry(target: Target, defaultBranch: string): Promise<void
 async function prepareWorktree(ctx: Context, target: Target, defaultBranch: string): Promise<void> {
   if (ctx.config.dryRun) return log("dry-run.worktree", { ticket: target.identifier });
   const worktree = worktreePath(target.path, target.identifier);
-  await ctx.git.fetch(target.path);
+  await ctx.git.fetch(target.path, target.repo);
   const plan = worktreePlan({
     worktreeExists: (await dirExists(worktree)) && (await isRegisteredWorktree(ctx, target.path, worktree)),
     localBranch: (await ctx.git.revParse(target.path, `refs/heads/${target.branch}`)) !== null,
@@ -359,6 +364,12 @@ async function postFixRequest(
   log("review.fix", { ticket: issue.identifier, cause, round: rounds + 1 });
 }
 
+/** Review rounds used since the ticket last entered Ready for agent (each human request starts fresh). */
+async function roundsUsed(ctx: Context, issue: Issue, known?: TimedComment[]): Promise<number> {
+  const comments = known ?? (await ctx.linear.issueComments(issue.identifier));
+  return changesRequestedRounds(comments, await ctx.linear.lastEnteredStateAt(issue.identifier, STATE.ready));
+}
+
 async function stepReview(ctx: Context): Promise<boolean> {
   for (const issue of reviewCandidates(await ctx.linear.issuesInState(STATE.agentReview))) {
     const target = issueTarget(issue);
@@ -372,7 +383,7 @@ async function stepReview(ctx: Context): Promise<boolean> {
     try {
       pr = await ctx.gh.findPr(target.repo, target.branch);
       const checks = pr?.state === "OPEN" ? await ctx.gh.checks(target.repo, pr.number) : [];
-      rounds = changesRequestedRounds(await ctx.linear.issueComments(issue.identifier));
+      rounds = await roundsUsed(ctx, issue);
       decision = reviewGate(pr, checks, rounds);
     } catch (error) {
       if (!(error instanceof GitHubError)) throw error;
@@ -426,7 +437,7 @@ async function setupWorktree(ctx: Context, issue: Issue, target: Target, default
     return true;
   } catch (error) {
     if (!(error instanceof GitError)) throw error;
-    await needsHuman(ctx, issue, `worktree setup failed: ${error.message}`);
+    await needsHuman(ctx, issue, `worktree setup failed: ${oneLine(error.message)}`);
     return false;
   }
 }
@@ -442,12 +453,13 @@ async function stepFix(ctx: Context): Promise<boolean> {
     let defaultBranch: string;
     try {
       const comments = await ctx.linear.issueComments(issue.identifier);
+      const rounds = await roundsUsed(ctx, issue, comments);
       const pr = await ctx.gh.findPr(target.repo, target.branch);
       defaultBranch = await ctx.gh.defaultBranch(target.repo);
       message = workerMessage(target, {
         defaultBranch,
         pr: pr ? { number: pr.number, url: pr.url } : undefined,
-        round: changesRequestedRounds(comments),
+        round: rounds,
         fix: latestFixRequest(comments),
       });
     } catch (error) {
@@ -481,8 +493,17 @@ async function stepNewWork(ctx: Context): Promise<boolean> {
     let message: string;
     let defaultBranch: string;
     try {
+      const existing = existingPrDecision(await ctx.gh.findPr(target.repo, target.branch));
+      if (existing.kind === "needsHuman") {
+        await needsHuman(ctx, issue, existing.reason);
+        continue;
+      }
       defaultBranch = await ctx.gh.defaultBranch(target.repo);
-      message = workerMessage(target, { defaultBranch, round: 0 });
+      message = workerMessage(target, {
+        defaultBranch,
+        pr: existing.kind === "follow-up" ? existing.pr : undefined,
+        round: await roundsUsed(ctx, issue),
+      });
     } catch (error) {
       if (!(error instanceof GitHubError)) throw error;
       log("work.github-error", { ticket: issue.identifier, message: error.message });

@@ -4,6 +4,8 @@ import type { Exec, ExecResult } from "../poller/exec.ts";
 import {
   changesRequestedRounds,
   cleanupCandidate,
+  existingPrDecision,
+  lastEnteredState,
   fixCandidates,
   issueProject,
   issueTarget,
@@ -59,16 +61,49 @@ describe("reviewGate", () => {
 });
 
 describe("changesRequestedRounds", () => {
-  test("counts only comments starting with the marker", () => {
-    expect(
-      changesRequestedRounds([
-        { body: "Agent review: changes requested (round 1/2) — url\nCI failed: a" },
-        { body: "see Agent review: changes requested" },
-        { body: "Agent review: approved" },
-        { body: "Agent review: changes requested" },
-      ]),
-    ).toBe(2);
+  const at = (body: string, createdAt: string) => ({ body, createdAt });
+  const comments = [
+    at("Agent review: changes requested (round 1/2) — url\nCI failed: a", "2026-10-01T10:00:00Z"),
+    at("see Agent review: changes requested", "2026-10-01T11:00:00Z"),
+    at("Agent review: approved", "2026-10-01T12:00:00Z"),
+    at("Agent review: changes requested", "2026-10-03T10:00:00Z"),
+  ];
+  test("counts only comments starting with the marker; null counts all", () => {
+    expect(changesRequestedRounds(comments, null)).toBe(2);
   });
+  test("counts only comments after the given time", () => {
+    expect(changesRequestedRounds(comments, "2026-10-02T00:00:00Z")).toBe(1);
+    expect(changesRequestedRounds(comments, "2026-10-03T10:00:00Z")).toBe(0);
+    expect(changesRequestedRounds(comments, "2026-09-01T00:00:00Z")).toBe(2);
+  });
+  test("no comments", () => expect(changesRequestedRounds([], "2026-10-02T00:00:00Z")).toBe(0));
+});
+
+describe("lastEnteredState", () => {
+  const history = [
+    { createdAt: "2026-10-03T00:00:00Z", toState: "Ready for agent" },
+    { createdAt: "2026-10-05T00:00:00Z", toState: "In Progress" },
+    { createdAt: "2026-10-09T00:00:00Z", toState: "Ready for agent" },
+    { createdAt: "2026-10-04T00:00:00Z", toState: null },
+  ];
+  test("latest entry into the state, whatever the order", () => {
+    expect(lastEnteredState(history, "Ready for agent")).toBe("2026-10-09T00:00:00Z");
+    expect(lastEnteredState([...history].reverse(), "Ready for agent")).toBe("2026-10-09T00:00:00Z");
+  });
+  test("null when never entered", () => {
+    expect(lastEnteredState(history, "Done")).toBeNull();
+    expect(lastEnteredState([], "Ready for agent")).toBeNull();
+  });
+});
+
+describe("existingPrDecision", () => {
+  const cases: [string, PrInfo | null, unknown][] = [
+    ["no PR", null, { kind: "new" }],
+    ["open PR", pr(), { kind: "follow-up", pr: { number: 7, url: "https://github.com/o/r/pull/7" } }],
+    ["merged PR", pr({ state: "MERGED" }), { kind: "needsHuman", reason: "PR #7 is merged; open a new ticket" }],
+    ["closed PR", pr({ state: "CLOSED" }), { kind: "needsHuman", reason: "PR #7 is closed; open a new ticket" }],
+  ];
+  test.each(cases)("%s", (_name, info, expected) => expect(existingPrDecision(info)).toEqual(expected as never));
 });
 
 describe("cleanupCandidate", () => {

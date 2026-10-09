@@ -1,9 +1,10 @@
-import { parseProjectConfig, parseProjectPath, type Comment, type Issue, type TimedComment } from "./select.ts";
+import { lastEnteredState, parseProjectConfig, parseProjectPath, type Comment, type Issue, type StateEntry, type TimedComment } from "./select.ts";
 
 const ENDPOINT = "https://api.linear.app/graphql";
 const REQUEST_TIMEOUT_MS = 30_000;
 const PAGE_SIZE = 50;
 const COMMENT_PAGE_SIZE = 100;
+const HISTORY_PAGE_SIZE = 100;
 const MAX_PAGES = 20;
 
 export class LinearError extends Error {}
@@ -187,6 +188,26 @@ export class LinearClient {
       }`,
       { id: identifier },
       (data) => data.issue.comments,
+    );
+  }
+
+  /** Time the issue last moved into `stateName`, from its history; null if never. */
+  async lastEnteredStateAt(identifier: string, stateName: string): Promise<string | null> {
+    const history = await this.paginate<{ createdAt: string; toState: { name: string } | null }>(
+      `query($id: String!, $after: String) {
+        issue(id: $id) {
+          history(first: ${HISTORY_PAGE_SIZE}, after: $after) {
+            nodes { createdAt toState { name } }
+            pageInfo { hasNextPage endCursor }
+          }
+        }
+      }`,
+      { id: identifier },
+      (data) => data.issue.history,
+    );
+    return lastEnteredState(
+      history.map((h): StateEntry => ({ createdAt: h.createdAt, toState: h.toState?.name ?? null })),
+      stateName,
     );
   }
 
