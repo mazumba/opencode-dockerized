@@ -392,7 +392,7 @@ The poller logs only ticket identifiers, actions, results, and durations: never 
 
 - It runs agents unattended with unrestricted `bash`.
 - `main` is not protected by the plugin: unless you enable branch protection, an agent can push to `main`.
-- Delegation to subagents is allowed, so a run can hang until its timeout kills it.
+- Delegation to subagents is allowed, so a run can hang until its timeout kills it. The worker, reviewer, and investigator may only delegate to the read-only `explorer` and `librarian` subagents; all edits, commits, and pushes stay with the worker itself.
 
 ### Adding a new plugin
 
