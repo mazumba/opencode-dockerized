@@ -25,8 +25,11 @@ type CopilotUserInfo = {
   message?: string // error case
 }
 
+// GitHub renamed premium interactions to AI Credits, but the API still returns the old key.
+const LABELS: Record<string, string> = { premium_interactions: "AI Credits" }
+
 function formatQuota(id: string, q: QuotaSnapshot): string {
-  const label = id.replaceAll("_", " ").replace(/^./, (char) => char.toUpperCase())
+  const label = LABELS[id] ?? id.replaceAll("_", " ").replace(/^./, (char) => char.toUpperCase())
   if (q.unlimited) {
     return `  ${label}: unlimited`
   }
@@ -41,7 +44,7 @@ function formatQuota(id: string, q: QuotaSnapshot): string {
 
 export default tool({
   description:
-    "Check your GitHub Copilot quota and usage. Shows used and remaining premium interactions, chat usage, completions, and plan details for the current billing period.",
+    "Check your GitHub Copilot quota and usage. Shows used and remaining AI Credits, chat usage, completions, and plan details for the current billing period.",
   args: {},
   async execute(_args, _context) {
     // Read GitHub OAuth token from OpenCode's auth store
@@ -88,7 +91,7 @@ export default tool({
       lines.push("No quota snapshot data available.")
     } else {
       lines.push("Quota:")
-      // Show premium_interactions first (most relevant), then others
+      // Show AI Credits (premium_interactions) first (most relevant), then others
       const order = ["premium_interactions", "premium_models", "chat", "completions"]
       const sorted = [
         ...order.filter((k) => k in snapshots),
