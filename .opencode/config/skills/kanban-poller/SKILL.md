@@ -12,16 +12,16 @@ Code: `docker/plugins/kanban/poller/`. Tests: `docker/plugins/kanban/tests/`. Co
 1. Auto-label: IF a `Backlog` ticket has none of `needs grilling`, `investigate`, `refined` THEN add `needs grilling`. No agent.
 2. Cleanup (never consumes the pass): see "Cleanup".
 3. Investigate: IF an `/investigate` comment by the API key owner, < 7 days old, has no 👀 THEN
-   1. IF the ticket is not in `Backlog` with `investigate` THEN reply `skipped`, react ❌, next.
-   2. ELSE react 👀, run `/investigate-ticket`, react ✅ (labels swapped) or ❌ + reply `failed`. End pass.
+   1. Config check (project `repo:`/`path:`, origin). IF it fails THEN react ❌, reply `failed`, next.
+   2. ELSE react 👀, run `/investigate-ticket` (any ticket, any state, any labels), react ✅ (a new `Agent investigation:` comment exists) or ❌ + reply `failed`. End pass.
 4. Review: for each `Agent review` ticket, oldest first, run the gate (see "Review gate"). IF the gate says `review` THEN run `/review-ticket`, end pass. ELSE handle it and continue with the next ticket.
 5. Fix: for the oldest `In Progress` ticket with `agent:changes-requested`:
    1. Pre-flight (see below). IF it fails THEN `Needs human`, next ticket.
-   2. ELSE remove the label, comment the claim, run `/work-ticket` with ctx (`fix.cause` = `ci` | `conflict` | `review`). End pass.
+   2. ELSE claim with 👀 on the issue, remove the label, fetch and create/reuse the worktree, run `/work-ticket` with ctx (`fix.cause` = `ci` | `conflict` | `review`). End pass.
 6. New work: for the oldest `Ready for agent` ticket:
-   1. IF it has `needs grilling` or `investigate` THEN move to `Backlog`, comment `not refined`, next ticket.
+   1. IF it has `needs grilling` or `investigate` THEN move to `Backlog` (bounce), next ticket.
    2. Pre-flight. IF it fails THEN `Needs human`, next ticket.
-   3. ELSE move to `In Progress`, comment the claim, run `/work-ticket` with ctx. End pass.
+   3. ELSE claim with 👀 on the issue, move to `In Progress`, fetch and create/reuse the worktree at `<path>/.slim/worktrees/<id-lowercase>` with its `.slim/worktrees.json` lane, run `/work-ticket` with ctx. End pass.
 7. IF nothing ran THEN log `pass.idle`.
 
 ## Review gate (`reviewGate` in `select.ts`, first match wins)
@@ -36,7 +36,7 @@ Code: `docker/plugins/kanban/poller/`. Tests: `docker/plugins/kanban/tests/`. Co
 
 Fix handling:
 1. IF prior `Agent review: changes requested` comments >= 2 THEN `Needs human` ("review limit reached").
-2. ELSE add `agent:changes-requested`, move to `In Progress`, comment `Agent review: changes requested (round n/2) — <PR>` + `CI failed: <names>` or `merge conflicts with <base>`.
+2. ELSE add `agent:changes-requested`, move to `In Progress`, comment `Agent review: changes requested (round n/2) — <PR>` + line 2 `CI failed: <names>` or `merge conflicts with <base>`. The poller parses line 2 for `fix.cause`, so reviewer summaries must not start with those phrases.
 3. IF cause is `ci` THEN reply with the last 150 lines of the failed run log.
 
 ## Pre-flight (work and fix runs)
@@ -44,6 +44,9 @@ Fix handling:
 1. IF the project description lacks exactly one `repo: owner/name` and one absolute `path:` THEN fail.
 2. IF the ticket has no safe branch name THEN fail.
 3. IF `path` is not a git repo OR `origin` does not match `repo` THEN fail.
+4. IF `.slim/worktrees/` is not git-ignored in the repo THEN fail.
+
+The poller, not the agent, fetches and creates the worktree. The GitHub App is also used for `git fetch` (needs `contents:read`).
 
 ## Cleanup
 
@@ -82,12 +85,12 @@ Candidates: `Ready for merge`; `Done` and `Canceled` updated in the last 14 days
 8. `cleanup.skip reason=uncommitted changes` or `... differs from PR head` THEN inspect the worktree; IF the work is not needed THEN remove it by hand.
 9. `cleanup.lanes-skip` THEN `.slim/worktrees.json` is missing, unreadable, or has no matching lane; harmless.
 10. Ticket ends in `Needs human` with `ended in state <x>` THEN the agent did not move the ticket; read its run output in opencode.
-11. `stale claim` at startup THEN a previous work run died; check the worktree and branch before moving the ticket back.
+11. `stale claim` at startup (the poller's 👀 on an `In Progress` issue is older than the work timeout) THEN a previous work run died; check the worktree and branch before moving the ticket back.
 
 ## Editing the poller
 
 1. IF changing a decision THEN change the pure function in `select.ts` and its table test in `tests/gate.test.ts`.
 2. IF adding a Linear, GitHub, or git write THEN route it through the `--dry-run` guard in `poller.ts`.
 3. IF calling `gh` or `git` THEN use the arg-array wrappers in `github.ts` / `git.ts`, never a shell string.
-4. IF changing the ctx JSON THEN update `work-ticket.md` / `review-ticket.md` (plugin and `.opencode/config/commands/` copies).
+4. IF changing the ctx JSON THEN update `work-ticket.md` / `review-ticket.md` / `investigate-ticket.md` (plugin and `.opencode/config/commands/` copies). The commands are poller-only and stop without ` ctx:`.
 5. Log ticket IDs, actions, and reasons only; never comment bodies, ticket text, or tokens.

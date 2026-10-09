@@ -2,8 +2,13 @@
 // everything that fails throws GitError. Mutations are the caller's to guard.
 import { stat } from "node:fs/promises";
 import { exec as defaultExec, type Exec } from "./exec.ts";
+import type { WorktreePlan } from "./select.ts";
 
 const GIT_TIMEOUT_MS = 60_000;
+const FETCH_TIMEOUT_MS = 180_000;
+// The poller container skips the github plugin entrypoint, so git has no global credential
+// helper; borrow gh's (the gh wrapper on PATH mints GitHub App tokens, like for gh calls).
+const GH_CREDENTIAL_ARGS = ["-c", "credential.helper=", "-c", "credential.helper=!gh auth git-credential"];
 
 export class GitError extends Error {}
 
@@ -13,6 +18,9 @@ export interface Git {
   worktreePaths(path: string): Promise<string[]>;
   statusPorcelain(worktree: string): Promise<string>;
   revParse(path: string, ref: string): Promise<string | null>;
+  isIgnored(path: string, relPath: string): Promise<boolean>;
+  fetch(path: string): Promise<void>;
+  worktreeAdd(path: string, worktree: string, plan: Exclude<WorktreePlan, { kind: "reuse" }>): Promise<void>;
   worktreeRemove(path: string, worktree: string): Promise<void>;
   branchDelete(path: string, branch: string): Promise<void>;
 }
@@ -25,16 +33,23 @@ export async function dirExists(path: string): Promise<boolean> {
   }
 }
 
+/** The git subcommand of an argument array, skipping `-C <dir>` and `-c <key=value>` options. */
+function subcommand(args: string[]): string {
+  let i = 0;
+  while (args[i] === "-C" || args[i] === "-c") i += 2;
+  return args[i] ?? args[0];
+}
+
 export function createGit(run: Exec = defaultExec): Git {
-  async function git(args: string[]) {
-    const result = await run(["git", ...args], { timeoutMs: GIT_TIMEOUT_MS });
-    if (result.timedOut) throw new GitError(`git ${args[2] ?? args[0]} timed out`);
+  async function git(args: string[], timeoutMs = GIT_TIMEOUT_MS) {
+    const result = await run(["git", ...args], { timeoutMs });
+    if (result.timedOut) throw new GitError(`git ${subcommand(args)} timed out`);
     return result;
   }
-  async function ok(args: string[]): Promise<string> {
-    const result = await git(args);
+  async function ok(args: string[], timeoutMs?: number): Promise<string> {
+    const result = await git(args, timeoutMs);
     if (result.code !== 0) {
-      throw new GitError(`git ${args[2] ?? args[0]} failed (exit ${result.code}): ${result.stderr.trim().slice(0, 200)}`);
+      throw new GitError(`git ${subcommand(args)} failed (exit ${result.code}): ${result.stderr.trim().slice(0, 200)}`);
     }
     return result.stdout;
   }
@@ -58,6 +73,22 @@ export function createGit(run: Exec = defaultExec): Git {
     async revParse(path, ref) {
       const result = await git(["-C", path, "rev-parse", "--verify", "--quiet", ref]);
       return result.code === 0 ? result.stdout.trim() : null;
+    },
+    async isIgnored(path, relPath) {
+      // check-ignore: exit 0 = ignored, 1 = not ignored, anything else = error.
+      const result = await git(["-C", path, "check-ignore", "-q", relPath]);
+      if (result.code === 0) return true;
+      if (result.code === 1) return false;
+      throw new GitError(`git check-ignore failed (exit ${result.code}): ${result.stderr.trim().slice(0, 200)}`);
+    },
+    async fetch(path) {
+      await ok([...GH_CREDENTIAL_ARGS, "-C", path, "fetch", "origin"], FETCH_TIMEOUT_MS);
+    },
+    async worktreeAdd(path, worktree, plan) {
+      const base = ["-C", path, "worktree", "add"];
+      if (plan.kind === "existing-local") await ok([...base, worktree, plan.branch]);
+      else if (plan.kind === "track") await ok([...base, "--track", "-b", plan.branch, worktree, `origin/${plan.branch}`]);
+      else await ok([...base, "--no-track", "-b", plan.branch, worktree, plan.base]);
     },
     async worktreeRemove(path, worktree) {
       await ok(["-C", path, "worktree", "remove", worktree]);
