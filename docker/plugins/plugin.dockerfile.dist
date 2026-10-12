@@ -1,7 +1,7 @@
 # Plugin: <name>
 # <Short description of what this plugin adds>
 #
-# Plugin convention: each plugin lives in docker/plugins/<name>/ and may carry up to six files:
+# Plugin convention: each plugin lives in docker/plugins/<name>/ and may carry up to eight files:
 #
 #   <name>.dockerfile        — system/apt dependencies (required)
 #                              Injected into Dockerfile.generated at the "# {{plugins}}" marker.
@@ -47,7 +47,19 @@
 #                              performs the merge and validation itself (`docker compose
 #                              config`); no merged file is generated or committed.
 #
-# Only <name>.dockerfile is required; the other five are optional.
+#   <name>.requires          — plugin dependencies (optional)
+#                              Plain text, one plugin name per line; blank lines and
+#                              "#" comments are ignored. build-plugins.sh fails if a
+#                              required plugin is missing from PLUGINS.
+#
+#   <name>.commands/         — slash commands (optional)
+#                              Directory of opencode command files (<command>.md).
+#                              Copied into .opencode/config/commands/ on build and
+#                              removed again when the plugin is disabled. Existing
+#                              commands that were not installed by a plugin are never
+#                              overwritten; a name clash is a build error.
+#
+# Only <name>.dockerfile is required; the other seven are optional.
 #
 # To activate: set PLUGINS=<name> in .env and run `make opencode-build-plugins`.
 #

@@ -82,6 +82,7 @@ Available plugins:
 | `image`   | `vips` (re-encode/strip images), `exiftool` (inspect metadata), `clamav`/`clamav-freshclam` (scan for malware) — see [Image plugin](#image-plugin) below |
 | `github`  | GitHub CLI (`gh`) and git, authenticated as a GitHub App — see [GitHub plugin](#github-plugin) below |
 | `linear`  | Linear remote MCP and a `linear` subagent, authenticated with a Linear API key — see [Linear plugin](#linear-plugin) below |
+| `kanban`  | Linear kanban workflow: agents implement and review tickets, you merge. Requires `linear` and `github` — see [Kanban plugin](#kanban-plugin) below |
 
 To enable plugins, set `PLUGINS` in your `.env` file (comma-separated):
 
@@ -253,9 +254,164 @@ make opencode-run
 - Everything the agent writes in Linear is attributed to the key's owner.
 - OAuth is not supported: its callback targets `localhost` inside the container.
 
+### Kanban plugin
+
+The `kanban` plugin turns a Linear board (team `DEY`) into a work queue. Agents refine, implement, and review tickets; a human approves and merges the pull requests. It needs the `linear` and `github` plugins (declared in `kanban.requires`; the build fails if either is missing from `PLUGINS`). It adds three primary agents (`ticket-worker`, `ticket-reviewer`, `ticket-investigator`) and four slash commands.
+
+**Lanes** (Linear workflow states, exact names):
+
+| Lane | Moved there by |
+|------|----------------|
+| `Backlog` | human (new tickets); the poller, when a `Ready for agent` ticket is not refined |
+| `Ready for agent` | human, after refinement. Counts as approval for the poller to create the worktree and ticket branch, and for the worker to push it |
+| `In Progress` | the poller (claim); `/review-ticket` (changes requested) |
+| `Agent review` | `/work-ticket` (PR opened or fixes pushed) |
+| `Ready for merge` | `/review-ticket` (clean review) |
+| `Done` | Linear's GitHub integration, when the human merges the PR |
+| `Needs human` | agents, on any blocker or after 2 review rounds |
+| `Canceled` | human |
+
+**Labels:**
+
+- `needs grilling`: scope is unclear; the human clarifies it with `/grill-ticket`.
+- `investigate`: facts are missing; the human starts `/investigate-ticket`.
+- `refined`: set by `/grill-ticket` when scope and acceptance criteria are agreed.
+- `agent:changes-requested`: set by `/review-ticket`, removed by the poller when it starts the fix round.
+
+`needs grilling` and `investigate` both mean "not refined". `refined` marks a ticket that went through grilling. Only refined tickets go to `Ready for agent`.
+
+**Refinement flow:**
+
+1. A new ticket gets `investigate` or `needs grilling`.
+2. The human comments `/investigate` on the ticket. The agent posts an `Agent investigation:` comment; labels and state stay as they are.
+3. The human runs `/grill-ticket <ID>` in a normal session, agrees on scope and acceptance criteria, and confirms the new description. `needs grilling` is replaced by `refined`.
+4. The human moves the ticket to `Ready for agent` (the commands never change this state).
+5. The poller bounces tickets that still carry either label back to `Backlog`.
+
+Investigation and grilling are always started by the human.
+
+**Answering a few questions without grilling:** write the answers as a ticket comment, add the label `refined`, then move the ticket to `Ready for agent`. Removing `needs grilling` alone is not enough: the poller adds it again to every `Backlog` ticket that has none of the three labels.
+
+**What counts as the spec.** The agents read the ticket description plus all comments (Linear and GitHub-synced), oldest to newest. A newer statement overrides an older one. Human comments, including GitHub-synced ones, outrank `Agent investigation:` proposals: an investigation is input, a human answer is a decision. Status comments (`Agent:`, `Agent review:`, `Agent investigation: skipped`, `Agent investigation: failed`) are not spec. If comments contradict each other and their order does not resolve it, the agent moves the ticket to `Needs human` with the open question instead of guessing. The reviewer checks the PR against the same spec.
+
+**Commands:**
+
+| Command | Agent | Started by |
+|---------|-------|------------|
+| `/work-ticket <ID> ctx:<json>` | `ticket-worker` | poller only |
+| `/review-ticket <ID> ctx:<json>` | `ticket-reviewer` | poller only |
+| `/investigate-ticket <ID> ctx:<json> [question]` | `ticket-investigator` (read-only) | poller, on a human `/investigate` comment (see below) |
+| `/grill-ticket <ID>` | the primary agent of your current session (interactive) | human only |
+
+`/work-ticket`, `/review-ticket`, and `/investigate-ticket` stop and change nothing when the arguments lack ` ctx:`.
+
+**Linear project format.** Each Linear project maps to one repository. Its description must contain these lines:
+
+```text
+repo: owner/name
+path: /absolute/path/to/checkout
+```
+
+Host repositories must be mounted into the container at identical paths (see `compose.override.yml`), so `path` is valid both on the host and in the container.
+
+**Manual setup checklist:**
+
+- [ ] In Linear team `DEY`, create the workflow states listed above and the four labels (`needs grilling`, `investigate`, `refined`, `agent:changes-requested`).
+- [ ] Add `repo:` and `path:` lines to every project description, and mount each checkout at the same path in `compose.override.yml`.
+- [ ] In each repo, commit the managed worktrees block to `.gitignore` (`.slim/worktrees/` and `.slim/worktrees.json` between the `oh-my-opencode-slim worktrees` markers). The poller's pre-flight requires `.slim/worktrees/` to be ignored. Agents do not edit `.gitignore`.
+- [ ] If you use Linear's GitHub Issues sync, sync GitHub to Linear only, and set the project on synced tickets before moving them to `Ready for agent`.
+- [ ] Keep the Linear GitHub automation "PR merged moves the ticket to Done" and disable the other PR automations, so only agents move tickets through the middle lanes.
+- [ ] Enable branch protection on `main` that requires a human approval.
+
+**Security notes:**
+
+- Both implementing and reviewing agents have unrestricted `bash`. Branch protection on GitHub is the only merge gate.
+- The Docker socket is mounted (see [Docker Socket Access](#docker-socket-access)), so an agent can control the host.
+- `LINEAR_API_KEY` is readable by every agent with `bash`.
+- Linear writes are attributed to the key's owner.
+- The trust model assumes a private repository: every ticket comment, including GitHub-synced ones, is part of the spec. If the synced GitHub repo becomes public, or a public repo is linked to a project, anyone can write spec through GitHub comments. Reconsider this before that happens.
+- The commands carry Hard limits that apply to whoever wrote the text (never reveal secrets, never work outside the worktree or in another repo, never change credentials, never merge or approve). They are instructions to the model, not technical enforcement.
+
+#### Poller
+
+The poller is an optional container that runs the agent commands unattended. It reuses the opencode image and talks to Linear and to the `opencode` container over HTTP. It reads PRs and CI checks, and runs `git fetch`, through its own GitHub App credentials (`KANBAN_GH_APP_ID`, `KANBAN_GH_APP_PRIVATE_KEY_PATH`, see below) and needs your projects directory mounted at the same path as in `opencode` (the `kanban-poller:` service in `compose.override.yml`, see `compose.override.yml.dist`) for pre-flight checks, worktree creation, and worktree cleanup. No Docker socket, no ports. It keeps no state; startup recovery handles stale claims.
+
+Each pass (default every 60 s) performs at most one agent run:
+
+1. Adds `needs grilling` to every `Backlog` ticket that has none of `needs grilling`, `investigate`, `refined`. No agent run.
+2. Handles `/investigate` comments (see below) and runs `/investigate-ticket` on any ticket, in any state.
+3. Gates the oldest ticket in `Agent review` on its PR before any agent runs:
+   - CI pending: waits, no agent.
+   - CI failed or merge conflicts: the poller moves the ticket to `In Progress`, adds `agent:changes-requested`, and comments `Agent review: changes requested (round n/2) — <PR URL>` with `CI failed: <names>` or `merge conflicts with <base>` (plus the failing log tail as a reply). This counts toward the 2-round limit (rounds are counted since the ticket last entered `Ready for agent`); at the limit the ticket goes to `Needs human`.
+   - No PR, PR closed or merged, or no CI checks configured: `Needs human`.
+   - CI green and no conflicts: runs `/review-ticket`.
+4. Runs `/work-ticket` (fix round; the cause is `ci`, `conflict`, or `review`) for the oldest `In Progress` ticket labelled `agent:changes-requested`, after claiming it with a 👀 reaction on the issue, removing the label, and preparing the worktree.
+5. Runs `/work-ticket` for the oldest `Ready for agent` ticket after claiming it with a 👀 reaction on the issue, moving it to `In Progress`, and preparing the worktree. If the ticket branch already has an open PR (a follow-up, see below), the worker gets it and pushes there; a merged or closed PR sends the ticket to `Needs human` ("open a new ticket"). A ticket that still has `needs grilling` or `investigate` is moved back to `Backlog` instead, and the next ticket is considered.
+6. Cleanup, each pass: for tickets in `Ready for merge`, `Done`, or `Canceled` (the last two updated within 14 days) whose PR is merged (or closed, for `Canceled`) and whose worktree `<path>/.slim/worktrees/<id>` exists, the poller removes the worktree (`git worktree remove`, no force), deletes the local branch, and drops the lane from `.slim/worktrees.json`. It does so only if the worktree is clean and the local branch tip equals the PR head SHA; otherwise it skips and logs.
+
+**Follow-up after `Ready for merge`:** comment the changes you want on the ticket and move it to `Ready for agent` (before merging the PR). The worker updates the same PR instead of opening a new one, and the ticket goes through agent review again. Each request gets a fresh 2 review rounds. If the PR was already merged or closed, the ticket goes to `Needs human`; open a new ticket instead.
+
+Before a work or fix run, a pre-flight checks the project's `repo:` and `path:`, that `path` is a git repo, and that `origin` matches `repo:`. It also requires `.slim/worktrees/` to be git-ignored. A failure moves the ticket to `Needs human` without an agent run. After pre-flight, the poller fetches `origin` and creates (or reuses) the worktree `<path>/.slim/worktrees/<id>` on the ticket branch, with its `.slim/worktrees.json` lane; the worker only works inside it.
+
+After a work or review run, the ticket must be in `Agent review` (or `Needs human`, for work), otherwise the poller moves it to `Needs human` with the reason (exit code, timeout, or the state it ended in). At startup, `In Progress` tickets whose poller 👀 reaction is older than the work timeout go to `Needs human` with the reason `stale claim`. On SIGTERM the running agent is killed and its ticket goes to `Needs human` with the reason `poller stopped`.
+
+**Investigate comments.** Comment on any ticket, in any state, with any labels:
+
+```text
+/investigate
+Optional question, on the same line or the following lines.
+```
+
+The first line must be exactly `/investigate` or start with `/investigate `. Only comments written by the API key owner count; comments with an external user, a bot actor, or a sync marker (GitHub-synced comments) are ignored, as are comments older than 7 days. The poller reports progress as reactions on your comment:
+
+| Reaction | Meaning |
+|----------|---------|
+| 👀 (`eyes`) | picked up; this is the claim, so the comment is not handled twice |
+| ✅ (`white_check_mark`) | finished: a new `Agent investigation:` comment exists |
+| 👀 + ❌ (`x`) | failed (non-zero exit, timeout, no new investigation comment, or `poller stopped`); a reply `Agent investigation: failed — <reason>` explains |
+| ❌ (`x`) only | config check failed before the claim (project `repo:`/`path:` or origin); a reply `Agent investigation: failed — <reason>` explains |
+
+If the 👀 reaction cannot be added, nothing runs and the poller retries on the next pass. Legacy comments that already have a reply starting with `Agent investigation:` count as handled. Reactions by other users are ignored.
+
+**Make targets** (the `kanban` plugin must be in `PLUGINS`, then rebuild with `make opencode-build-plugins`):
+
+| Target | Does |
+|--------|------|
+| `make kanban-poller-run` | start the poller in the background |
+| `make kanban-poller-logs` | follow its logs |
+| `make kanban-poller-down` | stop and remove it |
+| `make kanban-poller-once` | one real pass, then exit |
+| `make kanban-poller-dry-run` | one pass, then exit; logs intended actions, no Linear writes, no agent runs |
+
+**Environment** (`.env`):
+
+| Variable | Default | Meaning |
+|----------|---------|---------|
+| `LINEAR_API_KEY` | required | Linear API key (shared with the `linear` plugin) |
+| `OPENCODE_SERVER_PASSWORD` | required | password of the opencode server the poller attaches to |
+| `KANBAN_GH_APP_ID` | required | ID of the GitHub App the poller uses |
+| `KANBAN_GH_APP_PRIVATE_KEY_PATH` | required | host path to that App's private key (`.pem`), mounted read-only |
+| `KANBAN_GH_APP_INSTALLATION_ID` | empty | only needed if the App is installed on more than one account |
+| `KANBAN_TEAM` | `DEY` | Linear team key |
+| `KANBAN_POLL_INTERVAL` | `60` | seconds between passes |
+| `KANBAN_OPENCODE_URL` | `http://opencode:4096` | opencode server to attach to |
+| `KANBAN_TIMEOUT_WORK` | `60` | minutes before a work run is killed |
+| `KANBAN_TIMEOUT_REVIEW` | `20` | minutes before a review run is killed |
+| `KANBAN_TIMEOUT_INVESTIGATE` | `20` | minutes before an investigation is killed |
+
+The `KANBAN_GH_APP_*` variables are required whenever `kanban` is in `PLUGINS`; compose refuses to start without them. To reuse the `github` plugin's App, set them to the same values as `GH_APP_ID` and `GH_APP_PRIVATE_KEY_PATH`. The poller only reads from GitHub, so you can instead create a separate App with these repository permissions, all read-only: Contents, Pull requests, Checks, Commit statuses, Actions (for failed-run logs), and Metadata. The same App is used for `git fetch`, so add Contents: read. Worktree and branch cleanup uses local git only and needs no GitHub write access.
+
+The poller logs only ticket identifiers, actions, results, and durations: never the key, comment text, or ticket text. It exits with an error at startup if a required variable is missing, or if a state or label name is missing in Linear.
+
+**Poller security notes:**
+
+- It runs agents unattended with unrestricted `bash`.
+- `main` is not protected by the plugin: unless you enable branch protection, an agent can push to `main`.
+- Delegation to subagents is allowed, so a run can hang until its timeout kills it. The worker, reviewer, and investigator may only delegate to the read-only `explorer` and `librarian` subagents; all edits, commits, and pushes stay with the worker itself.
+
 ### Adding a new plugin
 
-Each plugin lives in its own subdirectory `docker/plugins/<name>/` and may include up to six files:
+Each plugin lives in its own subdirectory `docker/plugins/<name>/` and may include up to eight files:
 
 | File | Purpose | Required |
 |---|---|---|
@@ -265,6 +421,8 @@ Each plugin lives in its own subdirectory `docker/plugins/<name>/` and may inclu
 | `<name>.agent.jsonc` | agent fragment injected at `// {{agent-plugins}}`. If the plugin also ships an MCP fragment, that server's `<server>_*` tools are denied for all other agents at `// {{permission-plugins}}` (see [Browser MCP](#browser-mcp-playwright)) | No |
 | `<name>.entrypoint.sh` | startup hook run as root before the privilege drop (see [Image plugin](#image-plugin) for an example) | No |
 | `<name>.compose.yml` | Compose fragment layered onto `compose.yml` via `docker/compose-with-plugins.sh` | No |
+| `<name>.requires` | plugin names this plugin depends on, one per line (`#` comments and blank lines ignored). The build fails if one is missing from `PLUGINS` | No |
+| `<name>.commands/` | slash-command files (`<command>.md`) copied into `.opencode/config/commands/` on build and removed again when the plugin is disabled (tracked in `.opencode/config/commands/.plugin-commands`). The build fails if a file would overwrite an existing command or another plugin's command | No |
 
 Copy the template for the Dockerfile layer:
 
