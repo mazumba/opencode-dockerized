@@ -27,7 +27,6 @@ Under `.opencode/skills/security-profile/` ensure these files exist:
 
 - `SKILL.md`
 - `GOTCHAS.md`
-- `HISTORY.md`
 - `config.json`
 - `assets/.gitkeep`
 - `scripts/.gitkeep`
@@ -99,14 +98,6 @@ Under `.opencode/skills/security-profile/` ensure these files exist:
 - Ensure append-only gotcha template exists.
 - Never delete prior entries.
 
-### `HISTORY.md`
-
-- Append-only.
-- Add one dated entry for each run:
-  - `init`: `## <YYYY-MM-DD> — Security profile initialized`
-  - `refresh`: `## <YYYY-MM-DD> — Security profile refreshed`
-- Mention what changed and why.
-
 ### `config.json`
 
 - On `init`, create with inferred values plus safe starter defaults.
@@ -120,7 +111,6 @@ Under `.opencode/skills/security-profile/` ensure these files exist:
 
 - Keep `security-core` reusable; put repo-specific details only in `security-profile`.
 - `SKILL.md` is reference material, not procedural numbered instructions.
-- Use today's actual date in `HISTORY.md`.
 - Preserve existing user edits on refresh whenever safe.
 - Never create git commits.
 

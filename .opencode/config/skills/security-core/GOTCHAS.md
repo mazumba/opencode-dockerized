@@ -1,7 +1,7 @@
 # Gotchas
 
 Every real mistake, wrong assumption, and edge case discovered while working in this domain.
-Add an entry whenever something breaks unexpectedly. Also log it in HISTORY.md.
+Add an entry whenever something breaks unexpectedly.
 
 ---
 

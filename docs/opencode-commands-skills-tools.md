@@ -16,7 +16,7 @@ This page documents repository-specific slash commands, the skill layout, and cu
 | `/plan <artifact-folder> "<additional information>"`        | RPI phase 2 - turns a research doc into a numbered implementation plan                          |
 | `/update-plan <artifact-folder> "<additional information>"` | RPI helper - updates an existing plan using newly answered questions                            |
 | `/implement <artifact-folder>`                              | RPI phase 3 - executes the plan step by step and runs the quality gate                          |
-| `/skill <skill-name> "<description hint>"`                  | Scaffolds a new skill folder                                                                    |
+| `/skill <skill-name> "<description hint>"`                  | Builds a new skill via the `skill-creator` skill                                                |
 | `/security-profile [init\|refresh] [project-name]`          | Creates or refreshes a project-specific defensive `security-profile` skill from `security-core` |
 
 The RPI workflow is `research -> plan -> implement`:
@@ -40,7 +40,7 @@ For each project, run both commands so the repository gets and then maintains it
 /security-profile refresh
 ```
 
-- `init` scaffolds `.opencode/skills/security-profile/` with `SKILL.md`, `GOTCHAS.md`, `HISTORY.md`, and `config.json`.
+- `init` scaffolds `.opencode/skills/security-profile/` with `SKILL.md`, `GOTCHAS.md`, and `config.json`.
 - `refresh` updates inferred metadata while preserving user-owned settings where possible.
 
 The profile is defensive-only and intended to complement `.opencode/skills/security-core/`.
@@ -60,19 +60,24 @@ Upstream skills (mattpocock/skills, shadcn/improve) are pinned in `.opencode/con
 
 | File / Dir | Purpose |
 |---|---|
-| `SKILL.md` | Reference facts, file map, config and memory guidance |
-| `GOTCHAS.md` | Accumulated failure points and fixes - never deleted |
-| `HISTORY.md` | Append-only change log - one entry per session that modified the domain |
+| `SKILL.md` | Required. Lean entry point: steps and/or reference every branch needs |
+| `references/` | Disclosed reference, loaded only when a pointer in `SKILL.md` fires |
+| `scripts/` | Helper scripts the agent can run or compose |
 | `assets/` | Templates, static files, and output scaffolds |
-| `scripts/` | Helper scripts and libraries the agent can run or compose |
+| `GOTCHAS.md` | Optional. Known failure points for domains with recurring footguns |
+| `config.json` | Optional. Per-user values, written on first run |
+
+Only `SKILL.md` is required; the rest exist only when the skill uses them.
 
 ### Creating a skill
+
+The `skill-creator` skill (`.opencode/config/skills/skill-creator/`) builds new skills. It triggers on its own when you ask for a skill. `/skill` is a shortcut that loads it:
 
 ```sh
 /skill <skill-name> "<short description hint>"
 ```
 
-By default, the scaffold command creates `.opencode/skills/<skill-name>/`.
+By default the skill goes in `.opencode/skills/<skill-name>/`. Ask for `.opencode/config/skills/` to ship it to every container.
 
 Example:
 
@@ -80,14 +85,7 @@ Example:
 /skill billing-lib "Internal billing library - edge cases, footguns, charge flow"
 ```
 
-After creation:
-
-1. Fill in `SKILL.md` -> `## Key Facts` with what the model needs to know (not do): file paths, data shapes, naming rules, API shapes.
-2. Add reusable scripts to `scripts/` and reference them in `## File & Directory Map`.
-3. Add output templates or static assets to `assets/`.
-4. If the skill needs per-user config, keep `## Configuration` and define `config.json` shape.
-5. If the skill benefits from memory, keep `## Memory` and choose a persistent log format.
-6. Remove `## Configuration` and `## Memory` if not needed.
+Restart opencode afterwards so it loads the new skill.
 
 ## Custom tools
 
