@@ -1,4 +1,14 @@
-import { lastEnteredState, parseProjectConfig, parseProjectPath, type Comment, type Issue, type StateEntry, type TimedComment } from "./select.ts";
+import {
+  lastEnteredState,
+  type ProjectConfig,
+  parseProjectConfig,
+  type Comment,
+  type Issue,
+  type StateEntry,
+  type TicketComment,
+  type TicketData,
+  type TimedComment,
+} from "./select.ts";
 
 const ENDPOINT = "https://api.linear.app/graphql";
 const REQUEST_TIMEOUT_MS = 30_000;
@@ -56,6 +66,7 @@ export class LinearClient {
   constructor(
     private readonly apiKey: string,
     private readonly team: string,
+    private readonly projectsRoot: string | null = null,
   ) {}
 
   private async request<T>(query: string, variables: Record<string, unknown> = {}): Promise<T> {
@@ -133,14 +144,15 @@ export class LinearClient {
 
   private toIssue(raw: RawIssue): Issue {
     const projectText = [raw.project?.description, raw.project?.content].filter(Boolean).join("\n");
+    const projectConfig = parseProjectConfig(projectText, this.projectsRoot);
     return {
       id: raw.id,
       identifier: raw.identifier,
       createdAt: raw.createdAt,
       state: raw.state.name,
       labels: raw.labels.nodes.map((l) => l.name),
-      projectPath: projectText ? parseProjectPath(projectText) : null,
-      projectConfig: parseProjectConfig(projectText),
+      projectPath: "error" in projectConfig ? null : projectConfig.path,
+      projectConfig,
       branchName: raw.branchName,
       reactions: (raw.reactions ?? []).map((r) => ({
         id: r.id,
@@ -176,12 +188,45 @@ export class LinearClient {
     return this.toIssue(data.issue);
   }
 
+  /** The issue, or null when the identifier does not exist. */
+  async findIssue(identifier: string): Promise<Issue | null> {
+    try {
+      return await this.issue(identifier);
+    } catch (error) {
+      if (error instanceof LinearError && /not found/i.test(error.message)) return null;
+      throw error;
+    }
+  }
+
+  /** `repo:` and `path:` of every project of the team that has a valid description. */
+  async projectConfigs(): Promise<ProjectConfig[]> {
+    const projects = await this.paginate<{ description: string | null; content: string | null }>(
+      `query($key: String!, $after: String) {
+        teams(filter: { key: { eq: $key } }) {
+          nodes {
+            projects(first: ${PAGE_SIZE}, after: $after) {
+              nodes { description content }
+              pageInfo { hasNextPage endCursor }
+            }
+          }
+        }
+      }`,
+      { key: this.team },
+      (data) => data.teams.nodes[0]?.projects ?? { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } },
+    );
+    const configs = projects
+      .map((p) => parseProjectConfig([p.description, p.content].filter(Boolean).join("\n"), this.projectsRoot))
+      .filter((c): c is ProjectConfig => !("error" in c));
+    return [...new Map(configs.map((c) => [c.path, c])).values()];
+  }
+
+  /** Comments oldest first, with their author's user id (the poller's own comments carry its API user id). */
   async issueComments(identifier: string): Promise<TimedComment[]> {
-    return this.paginate<TimedComment>(
+    const raw = await this.paginate<{ body: string; createdAt: string; user: { id: string } | null }>(
       `query($id: String!, $after: String) {
         issue(id: $id) {
           comments(first: ${COMMENT_PAGE_SIZE}, after: $after) {
-            nodes { body createdAt }
+            nodes { body createdAt user { id } }
             pageInfo { hasNextPage endCursor }
           }
         }
@@ -189,6 +234,100 @@ export class LinearClient {
       { id: identifier },
       (data) => data.issue.comments,
     );
+    return raw.map((c) => ({ body: c.body, createdAt: c.createdAt, authorId: c.user?.id ?? null }));
+  }
+
+  /** Everything the agent may read about a ticket: details, attachments, all comments, state history. */
+  async ticketData(identifier: string): Promise<TicketData> {
+    const detail = await this.request<{
+      issue: {
+        identifier: string;
+        title: string;
+        description: string | null;
+        url: string;
+        state: { name: string };
+        labels: { nodes: { name: string }[] };
+        project: { name: string } | null;
+        attachments: { nodes: { title: string | null; url: string }[] };
+      };
+    }>(
+      `query($id: String!) {
+        issue(id: $id) {
+          identifier title description url
+          state { name }
+          labels(first: 50) { nodes { name } }
+          project { name }
+          attachments(first: 50) { nodes { title url } }
+        }
+      }`,
+      { id: identifier },
+    );
+    const comments = await this.paginate<{
+      id: string;
+      body: string;
+      createdAt: string;
+      parent: { id: string } | null;
+      user: { id: string; name: string } | null;
+      externalUser: { name: string } | null;
+      botActor: { name: string | null } | null;
+    }>(
+      `query($id: String!, $after: String) {
+        issue(id: $id) {
+          comments(first: ${COMMENT_PAGE_SIZE}, after: $after) {
+            nodes {
+              id body createdAt
+              parent { id }
+              user { id name }
+              externalUser { name }
+              botActor { name }
+            }
+            pageInfo { hasNextPage endCursor }
+          }
+        }
+      }`,
+      { id: identifier },
+      (data) => data.issue.comments,
+    );
+    const history = await this.paginate<{
+      createdAt: string;
+      fromState: { name: string } | null;
+      toState: { name: string } | null;
+    }>(
+      `query($id: String!, $after: String) {
+        issue(id: $id) {
+          history(first: ${HISTORY_PAGE_SIZE}, after: $after) {
+            nodes { createdAt fromState { name } toState { name } }
+            pageInfo { hasNextPage endCursor }
+          }
+        }
+      }`,
+      { id: identifier },
+      (data) => data.issue.history,
+    );
+    const raw = detail.issue;
+    return {
+      identifier: raw.identifier,
+      title: raw.title,
+      description: raw.description,
+      state: raw.state.name,
+      labels: raw.labels.nodes.map((l) => l.name),
+      projectName: raw.project?.name ?? null,
+      url: raw.url,
+      attachments: raw.attachments.nodes.map((a) => ({ title: a.title ?? "", url: a.url })),
+      comments: comments.map(
+        (c): TicketComment => ({
+          id: c.id,
+          parentId: c.parent?.id ?? null,
+          authorName: c.user?.name ?? c.externalUser?.name ?? c.botActor?.name ?? null,
+          authorUserId: c.user?.id ?? null,
+          createdAt: c.createdAt,
+          body: c.body,
+        }),
+      ),
+      stateHistory: history
+        .filter((h) => h.toState !== null)
+        .map((h) => ({ createdAt: h.createdAt, from: h.fromState?.name ?? null, to: h.toState!.name })),
+    };
   }
 
   /** Time the issue last moved into `stateName`, from its history; null if never. */

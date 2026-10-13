@@ -6,7 +6,8 @@ services:
 #     Mount your auth.json file here, if you have one:
       - ./.opencode/share/auth.json:/home/opencode/.local/share/opencode/auth.json
 
-  # Same projects path as opencode: needed for pre-flight checks and worktree cleanup.
+  # Only with the kanban plugin. Same real host path as opencode, mounted at the
+  # same path: KANBAN_PROJECTS_ROOT points here, and lane stacks bind-mount from it.
   kanban-poller:
     volumes:
       - /full/path/to/my/projects:/full/path/to/my/projects

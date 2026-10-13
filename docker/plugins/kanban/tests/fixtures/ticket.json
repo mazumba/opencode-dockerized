@@ -1,0 +1,19 @@
+{
+  "identifier": "DEY-9",
+  "title": "Add the thing",
+  "description": "Do the thing.",
+  "state": "In Progress",
+  "labels": ["refined"],
+  "projectName": "Demo",
+  "url": "https://linear.app/x/issue/DEY-9",
+  "attachments": [{ "title": "Issue 4", "url": "https://github.com/o/r/issues/4" }],
+  "comments": [
+    { "id": "c2", "parentId": "c1", "authorName": "Poller", "authorUserId": "viewer", "createdAt": "2026-10-02T10:00:00Z", "body": "Agent investigation: reply" },
+    { "id": "c1", "parentId": null, "authorName": "Max", "authorUserId": "human", "createdAt": "2026-10-01T10:00:00Z", "body": "/investigate" },
+    { "id": "c3", "parentId": null, "authorName": "GitHub", "authorUserId": null, "createdAt": "2026-10-03T10:00:00Z", "body": "synced" }
+  ],
+  "stateHistory": [
+    { "createdAt": "2026-10-05T00:00:00Z", "from": "Ready for agent", "to": "In Progress" },
+    { "createdAt": "2026-10-04T00:00:00Z", "from": "Backlog", "to": "Ready for agent" }
+  ]
+}

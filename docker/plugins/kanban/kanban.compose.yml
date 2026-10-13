@@ -3,11 +3,25 @@
 # optional kanban-poller service (profile "kanban-poller"; start it with
 # `make kanban-poller-run`). The poller talks to the opencode container and to
 # Linear, and uses its own GitHub App credentials (KANBAN_GH_APP_*, mapped to
-# the GH_APP_* names gh-app-token reads) for read-only PR and CI checks and for
-# git fetch (contents:read). It needs the project checkouts mounted
-# (compose.override.yml, same path as opencode) for pre-flight checks,
-# worktree creation, and worktree cleanup. No Docker socket, no
-# ports. Its entrypoint bypasses the image entrypoint and plugin hooks.
+# the GH_APP_* names gh-app-token reads): read access to PRs and CI checks,
+# git clone and fetch (contents:read), and a push of a clean merge of the base
+# branch into a conflicting PR branch (contents:write, never forced). No ports.
+#
+# A project needs only `repo: owner/name` in its Linear description. The poller
+# clones missing checkouts into KANBAN_PROJECTS_ROOT/<repo name> (or the
+# project's explicit `path:`), so that directory tree must be mounted at the
+# same path in the opencode and the kanban-poller container
+# (compose.override.yml): the Docker daemon resolves bind paths on the host.
+#
+# The Docker socket is mounted so the poller can tear down a lane's compose
+# stacks (`docker compose -p <project> down -v`) and delete lane directories
+# with root-owned files (a throwaway alpine container) when it removes a
+# worktree or an orphaned lane directory. That is root on the host; the agents
+# in the opencode container have the same socket anyway.
+#
+# The service bypasses the image entrypoint and plugin hooks. The inline
+# entrypoint repeats only its socket step (join the socket's group), then drops
+# to the opencode user.
 services:
   opencode:
     image: opencode-dockerized-opencode:local
@@ -16,22 +30,39 @@ services:
     image: opencode-dockerized-opencode:local
     pull_policy: never
     profiles: ["kanban-poller"]
-    user: opencode
-    entrypoint: ["/home/opencode/.bun/bin/bun", "/usr/local/lib/opencode/kanban-poller/poller.ts"]
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        if [ -S /var/run/docker.sock ]; then
+          gid=$$(stat -c '%g' /var/run/docker.sock)
+          getent group "$$gid" > /dev/null 2>&1 || groupadd -g "$$gid" docker-host
+          usermod -aG "$$gid" opencode
+        fi
+        exec gosu opencode /home/opencode/.bun/bin/bun /usr/local/lib/opencode/kanban-poller/poller.ts "$$@"
+      - kanban-poller
     command: []
+    # Bun runs as PID 1 otherwise; init reaps zombies from hook and git children.
+    init: true
     restart: unless-stopped
+    # The poller aborts its sessions and settles their tickets on SIGTERM (up to 50 s).
+    stop_grace_period: 60s
     depends_on:
       - opencode
     volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
       - ${KANBAN_GH_APP_PRIVATE_KEY_PATH:?KANBAN_GH_APP_PRIVATE_KEY_PATH is not set. Set it in .env (see README "Kanban plugin")}:/run/secrets/github-app.pem:ro
     environment:
       GH_APP_ID: ${KANBAN_GH_APP_ID:?KANBAN_GH_APP_ID is not set. Set it in .env (see README "Kanban plugin")}
       GH_APP_INSTALLATION_ID: ${KANBAN_GH_APP_INSTALLATION_ID:-}
       LINEAR_API_KEY: ${LINEAR_API_KEY:?LINEAR_API_KEY is not set. Set it in .env (see README "Linear plugin")}
       OPENCODE_SERVER_PASSWORD: ${OPENCODE_SERVER_PASSWORD:?OPENCODE_SERVER_PASSWORD is not set. Set it in .env}
+      KANBAN_PROJECTS_ROOT: ${KANBAN_PROJECTS_ROOT:-}
       KANBAN_TEAM: ${KANBAN_TEAM:-DEY}
       KANBAN_POLL_INTERVAL: ${KANBAN_POLL_INTERVAL:-60}
       KANBAN_OPENCODE_URL: ${KANBAN_OPENCODE_URL:-http://opencode:4096}
       KANBAN_TIMEOUT_WORK: ${KANBAN_TIMEOUT_WORK:-60}
       KANBAN_TIMEOUT_REVIEW: ${KANBAN_TIMEOUT_REVIEW:-20}
       KANBAN_TIMEOUT_INVESTIGATE: ${KANBAN_TIMEOUT_INVESTIGATE:-20}
+      KANBAN_MAX_AUTOMATED: ${KANBAN_MAX_AUTOMATED:-3}
+      KANBAN_CI_PENDING_TIMEOUT: ${KANBAN_CI_PENDING_TIMEOUT:-30}
