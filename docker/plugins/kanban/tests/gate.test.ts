@@ -501,7 +501,7 @@ describe("ensureInstallationId", () => {
   test("fails clearly for zero or several installations", async () => {
     for (const list of [[], [{ id: 1 }, { id: 2 }]]) {
       await expect(ensureInstallationId(deps({ fetchInstallations: async () => list }))).rejects.toThrow(
-        "set KANBAN_GH_APP_INSTALLATION_ID",
+        "set GH_APP_INSTALLATION_ID",
       );
     }
   });

@@ -2,8 +2,8 @@
 # Tags the opencode image so the poller service can reuse it, and defines the
 # optional kanban-poller service (profile "kanban-poller"; start it with
 # `make kanban-poller-run`). The poller talks to the opencode container and to
-# Linear, and uses its own GitHub App credentials (KANBAN_GH_APP_*, mapped to
-# the GH_APP_* names gh-app-token reads): read access to PRs and CI checks,
+# Linear, and uses the github plugin's App (GH_APP_*): read access to PRs, CI
+# checks and run logs,
 # git clone and fetch (contents:read), and a push of a clean merge of the base
 # branch into a conflicting PR branch (contents:write, never forced). No ports.
 #
@@ -51,10 +51,10 @@ services:
       - opencode
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - ${KANBAN_GH_APP_PRIVATE_KEY_PATH:?KANBAN_GH_APP_PRIVATE_KEY_PATH is not set. Set it in .env (see README "Kanban plugin")}:/run/secrets/github-app.pem:ro
+      - ${GH_APP_PRIVATE_KEY_PATH:?GH_APP_PRIVATE_KEY_PATH is not set. Set it in .env (see README "GitHub plugin")}:/run/secrets/github-app.pem:ro
     environment:
-      GH_APP_ID: ${KANBAN_GH_APP_ID:?KANBAN_GH_APP_ID is not set. Set it in .env (see README "Kanban plugin")}
-      GH_APP_INSTALLATION_ID: ${KANBAN_GH_APP_INSTALLATION_ID:-}
+      GH_APP_ID: ${GH_APP_ID:?GH_APP_ID is not set. Set it in .env (see README "GitHub plugin")}
+      GH_APP_INSTALLATION_ID: ${GH_APP_INSTALLATION_ID:-}
       LINEAR_API_KEY: ${LINEAR_API_KEY:?LINEAR_API_KEY is not set. Set it in .env (see README "Linear plugin")}
       OPENCODE_SERVER_PASSWORD: ${OPENCODE_SERVER_PASSWORD:?OPENCODE_SERVER_PASSWORD is not set. Set it in .env}
       KANBAN_PROJECTS_ROOT: ${KANBAN_PROJECTS_ROOT:-}
