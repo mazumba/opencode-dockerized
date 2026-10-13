@@ -40,9 +40,17 @@ export function parsePrList(json: unknown): PrInfo | null {
     mergeable: raw.mergeable === "MERGEABLE" || raw.mergeable === "CONFLICTING" ? raw.mergeable : "UNKNOWN",
     baseRefName: String(raw.baseRefName),
     headRefOid: String(raw.headRefOid),
+    updatedAt: typeof raw.updatedAt === "string" ? raw.updatedAt : null,
   }));
   const newestFirst = [...prs].sort((a, b) => b.number - a.number);
   return newestFirst.find((p) => p.state === "OPEN") ?? newestFirst[0] ?? null;
+}
+
+/** gh reports a queued check's start as the zero time (year 1); that is "not started". */
+function parseStartedAt(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const time = Date.parse(value);
+  return Number.isFinite(time) && time > 0 ? value : null;
 }
 
 export function parseChecks(json: unknown): Check[] {
@@ -51,6 +59,7 @@ export function parseChecks(json: unknown): Check[] {
     name: String(raw.name),
     // An unknown bucket must not read as green.
     bucket: BUCKETS.includes(raw.bucket) ? raw.bucket : "pending",
+    startedAt: parseStartedAt(raw.startedAt),
   }));
 }
 
@@ -78,14 +87,14 @@ export function createGh(run: Exec = defaultExec): Gh {
       return parsePrList(
         await ghJson([
           "pr", "list", "--repo", repo, "--head", branch, "--state", "all",
-          "--json", "number,url,state,mergeable,baseRefName,headRefOid",
+          "--json", "number,url,state,mergeable,baseRefName,headRefOid,updatedAt",
         ]),
       );
     },
 
     async checks(repo, pr) {
       // gh exits 8 while checks are pending and 1 when some failed; stdout is still JSON.
-      const result = await gh(["pr", "checks", String(pr), "--repo", repo, "--json", "name,bucket"]);
+      const result = await gh(["pr", "checks", String(pr), "--repo", repo, "--json", "name,bucket,startedAt"]);
       const stdout = result.stdout.trim();
       if (stdout.startsWith("[")) return parseChecks(parseJson(stdout, "gh pr checks"));
       if (/no checks reported/i.test(result.stderr) || /no checks reported/i.test(stdout)) return [];

@@ -2,15 +2,16 @@ import { describe, expect, test } from "bun:test";
 import issues from "./fixtures/issues.json";
 import comments from "./fixtures/comments.json";
 import { loadConfig, ConfigError } from "../poller/config.ts";
-import { buildArgs } from "../poller/runner.ts";
 import {
   autoLabelTargets,
   addLane,
+  abandonedLanes,
+  lowestFreeSlot,
   investigateRequests,
+  investigationComment,
   investigationOutcome,
   investigatorMessage,
   parseInvestigate,
-  parseProjectPath,
   fixCandidates,
   readyCandidates,
   refinementLabel,
@@ -77,35 +78,59 @@ describe("investigateRequests", () => {
 });
 
 describe("investigationOutcome", () => {
-  const ok = { exitCode: 0, timedOut: false, aborted: false, minutes: 3 };
-  const START = Date.parse("2026-10-08T12:00:00Z");
-  const note = (body: string, createdAt = "2026-10-08T12:05:00Z") => ({ body, createdAt });
-  test("success needs exit 0 and a fresh `Agent investigation:` comment", () => {
-    expect(investigationOutcome(ok, [note("Agent investigation: found it")], START)).toEqual({ emoji: "white_check_mark" });
-    expect(investigationOutcome(ok, [note("Agent investigation: x", "2026-10-08T12:00:00Z")], START)).toEqual({ emoji: "white_check_mark" });
+  const ok = { error: null, timedOut: false, aborted: false, minutes: 3 };
+  const done = 'text\nKANBAN-RESULT: {"outcome":"done"}';
+  test("success needs exit 0, a done marker, and a non-empty report", () => {
+    expect(investigationOutcome(ok, done, "  # Findings\n")).toEqual({ emoji: "white_check_mark", report: "# Findings" });
   });
   test("failures map to x with a reason, most specific first", () => {
-    const comments = [note("Agent investigation: found it")];
-    expect(investigationOutcome({ ...ok, aborted: true }, comments, START)).toEqual({ emoji: "x", reason: "poller stopped" });
-    expect(investigationOutcome({ ...ok, timedOut: true, exitCode: null }, comments, START)).toEqual({ emoji: "x", reason: "timeout after 3 min" });
-    expect(investigationOutcome({ ...ok, exitCode: 2 }, comments, START)).toEqual({ emoji: "x", reason: "exit code 2" });
+    expect(investigationOutcome({ ...ok, aborted: true }, done, "r")).toEqual({ emoji: "x", reason: "poller stopped" });
+    expect(investigationOutcome({ ...ok, timedOut: true }, done, "r")).toEqual({ emoji: "x", reason: "timeout after 3 min" });
+    expect(investigationOutcome({ ...ok, error: "APIError: boom" }, done, "r")).toEqual({ emoji: "x", reason: "agent error: APIError: boom" });
   });
-  const noComment = { emoji: "x", reason: "no investigation comment posted" };
-  test("no comment, an older comment, a `failed` comment, or an unrelated comment is a failure", () => {
-    expect(investigationOutcome(ok, [], START)).toEqual(noComment);
-    expect(investigationOutcome(ok, [note("Agent investigation: old", "2026-10-08T11:59:59Z")], START)).toEqual(noComment);
-    expect(investigationOutcome(ok, [note("Agent investigation: failed — timeout")], START)).toEqual(noComment);
-    expect(investigationOutcome(ok, [note("Looks fine to me")], START)).toEqual(noComment);
+  test("missing marker, needs-human, and a missing or blank report are failures", () => {
+    expect(investigationOutcome(ok, "no marker", "r")).toEqual({ emoji: "x", reason: "no valid result marker (marker missing)" });
+    expect(
+      investigationOutcome(ok, 'KANBAN-RESULT: {"outcome":"needs-human","step":"read","reason":"no access"}', "r"),
+    ).toEqual({ emoji: "x", reason: "read: no access" });
+    expect(investigationOutcome(ok, done, null)).toEqual({ emoji: "x", reason: "no investigation report written" });
+    expect(investigationOutcome(ok, done, " \n")).toEqual({ emoji: "x", reason: "no investigation report written" });
+  });
+});
+
+describe("investigationComment", () => {
+  test("prefixes the report", () => {
+    expect(investigationComment("Findings")).toBe("Agent investigation:\n\nFindings");
+  });
+  test("caps long reports with a truncation note", () => {
+    const body = investigationComment("x".repeat(70_000));
+    expect(body.length).toBe(60_000);
+    expect(body.startsWith("Agent investigation:\n\nxxx")).toBe(true);
+    expect(body.endsWith("characters omitted)")).toBe(true);
+  });
+  test("a report at the cap is kept whole", () => {
+    const report = "x".repeat(60_000 - "Agent investigation:\n\n".length);
+    expect(investigationComment(report).length).toBe(60_000);
+    expect(investigationComment(report)).not.toContain("truncated");
+  });
+  test("does not double a leading prefix", () => {
+    expect(investigationComment("Agent investigation:\n\nFindings\n")).toBe("Agent investigation:\n\nFindings");
   });
 });
 
 describe("investigatorMessage", () => {
   const project = { identifier: "DEY-9", repo: "o/r", path: "/repo" };
+  const ctx = JSON.stringify({
+    repo: "o/r",
+    path: "/repo",
+    ticketFile: "/repo/.slim/worktrees/.tickets/DEY-9.r1.json",
+    reportFile: "/repo/.slim/worktrees/.tickets/DEY-9.r1.investigation.md",
+  });
   test("single ctx line without a question", () => {
-    expect(investigatorMessage(project, "")).toBe('DEY-9 ctx:{"repo":"o/r","path":"/repo"}');
+    expect(investigatorMessage(project, "", "r1")).toBe(`DEY-9 ctx:${ctx}`);
   });
   test("question follows on the next line, verbatim", () => {
-    expect(investigatorMessage(project, "Why?\nMore")).toBe('DEY-9 ctx:{"repo":"o/r","path":"/repo"}\nWhy?\nMore');
+    expect(investigatorMessage(project, "Why?\nMore", "r1")).toBe(`DEY-9 ctx:${ctx}\nWhy?\nMore`);
   });
 });
 
@@ -150,7 +175,7 @@ describe("staleClaims", () => {
     branchName: "b",
     reactions,
   });
-  const stale = (...issues: Issue[]) => ids(staleClaims(issues, VIEWER, NOW, WORK_TIMEOUT_MS));
+  const stale = (...issues: Issue[]) => ids(staleClaims(issues, VIEWER, NOW, WORK_TIMEOUT_MS, new Set()));
 
   const cases: [string, Issue, boolean][] = [
     ["old viewer claim", issue("old", [reaction()]), true],
@@ -165,6 +190,12 @@ describe("staleClaims", () => {
   ];
   test.each(cases)("%s", (_name, candidate, expected) => {
     expect(stale(candidate)).toEqual(expected ? [candidate.id] : []);
+  });
+
+  test("issues with a live job are excluded", () => {
+    const running = issue("old", [reaction()]);
+    expect(ids(staleClaims([running], VIEWER, NOW, WORK_TIMEOUT_MS, new Set([running.identifier])))).toEqual([]);
+    expect(ids(staleClaims([running], VIEWER, NOW, WORK_TIMEOUT_MS, new Set(["DEY-2"])))).toEqual(["old"]);
   });
 
   test("viewerClaimReactionIds returns only the viewer's claim reactions", () => {
@@ -194,7 +225,7 @@ describe("worktreePlan", () => {
 describe("addLane", () => {
   const NOW_ISO = "2026-10-09T10:00:00.000Z";
   const lane = { slug: "dey-9", branch: "max/dey-9", base: "main", purpose: "ticket DEY-9" };
-  const expectedLane = {
+  const expectedLane = (slot: number) => ({
     slug: "dey-9",
     branch: "max/dey-9",
     path: ".slim/worktrees/dey-9",
@@ -204,22 +235,44 @@ describe("addLane", () => {
     status: "active",
     areas: [],
     createdAt: NOW_ISO,
-  };
-  test("creates a registry when none exists", () => {
-    expect(addLane(null, lane, NOW_ISO)).toEqual({ version: "1.0.0", updatedAt: NOW_ISO, lanes: [expectedLane] });
+    slot,
   });
-  test("appends and keeps other lanes and unknown fields", () => {
-    const registry = { version: "1.0.0", updatedAt: "old", extra: 1, lanes: [{ slug: "other", path: ".slim/worktrees/other" }] };
-    expect(addLane(registry, lane, NOW_ISO)).toEqual({
-      ...registry,
-      updatedAt: NOW_ISO,
-      lanes: [registry.lanes[0], expectedLane],
+  test("creates a registry when none exists, with slot 1", () => {
+    expect(addLane(null, lane, NOW_ISO)).toEqual({
+      registry: { version: "1.0.0", updatedAt: NOW_ISO, lanes: [expectedLane(1)] },
+      slot: 1,
     });
-    expect(registry.lanes).toHaveLength(1);
   });
-  test("is idempotent when the lane exists", () => {
-    const registry = { version: "1.0.0", updatedAt: "old", lanes: [{ slug: "dey-9" }] };
-    expect(addLane(registry, lane, NOW_ISO)).toBe(registry);
+  test("appends, keeps other lanes and unknown fields, and takes the lowest free slot of any owner", () => {
+    const registry = {
+      version: "1.0.0",
+      updatedAt: "old",
+      extra: 1,
+      lanes: [
+        { slug: "a", owner: "orchestrator", slot: 1 },
+        { slug: "b", owner: "kanban-poller", slot: 3 },
+        { slug: "c" },
+      ],
+    };
+    const added = addLane(registry, lane, NOW_ISO);
+    expect(added).toEqual({
+      registry: { ...registry, updatedAt: NOW_ISO, lanes: [...registry.lanes, expectedLane(2)] },
+      slot: 2,
+    });
+    expect(registry.lanes).toHaveLength(3);
+  });
+  test("is idempotent and keeps the slot when the lane exists", () => {
+    const registry = { version: "1.0.0", updatedAt: "old", lanes: [{ slug: "dey-9", slot: 4 }] };
+    const added = addLane(registry, lane, NOW_ISO);
+    expect(added?.registry).toBe(registry);
+    expect(added?.slot).toBe(4);
+  });
+  test("gives an existing lane without a slot the lowest free one", () => {
+    const registry = { version: "1.0.0", updatedAt: "old", lanes: [{ slug: "x", slot: 1 }, { slug: "dey-9", branch: "b" }] };
+    expect(addLane(registry, lane, NOW_ISO)).toEqual({
+      registry: { ...registry, updatedAt: NOW_ISO, lanes: [registry.lanes[0], { slug: "dey-9", branch: "b", slot: 2 }] },
+      slot: 2,
+    });
   });
   test("returns null for a malformed registry", () => {
     expect(addLane({ lanes: "x" }, lane, NOW_ISO)).toBeNull();
@@ -227,15 +280,53 @@ describe("addLane", () => {
   });
 });
 
-describe("parseProjectPath", () => {
-  test("extracts the path line", () => {
-    expect(parseProjectPath("repo: a/b\npath: /home/x/repo\n")).toBe("/home/x/repo");
+describe("abandoned lanes free their slot", () => {
+  const NOW_ISO = "2026-10-09T10:00:00.000Z";
+  const lane = { slug: "dey-9", branch: "b", base: "main", purpose: "ticket DEY-9" };
+  const registry = {
+    version: "1.0.0",
+    updatedAt: "old",
+    lanes: [
+      { slug: "dey-1", owner: "kanban-poller", slot: 1 },
+      { slug: "dey-2", owner: "kanban-poller", slot: 2 },
+      { slug: "mine", owner: "orchestrator", slot: 3 },
+    ],
+  };
+  test("abandonedLanes: only the poller's lanes without a directory", () => {
+    expect(abandonedLanes(registry, new Set(["dey-2"]))).toEqual(new Set(["dey-1"]));
+    expect(abandonedLanes(registry, new Set(["dey-1", "dey-2"]))).toEqual(new Set());
+    expect(abandonedLanes(registry, new Set())).toEqual(new Set(["dey-1", "dey-2"]));
+    expect(abandonedLanes(null, new Set())).toEqual(new Set());
+    expect(abandonedLanes({ lanes: "x" }, new Set())).toEqual(new Set());
   });
-  test("strips backticks", () => expect(parseProjectPath("path: `/x`")).toBe("/x"));
-  test("rejects missing, relative, and ambiguous paths", () => {
-    expect(parseProjectPath("repo: a/b")).toBeNull();
-    expect(parseProjectPath("path: relative/dir")).toBeNull();
-    expect(parseProjectPath("path: /a\npath: /b")).toBeNull();
+  test("addLane drops abandoned lanes and reuses their slot", () => {
+    const added = addLane(registry, lane, NOW_ISO, new Set(["dey-1"]));
+    expect(added?.slot).toBe(1);
+    expect(added?.registry.lanes.map((l) => l.slug)).toEqual(["dey-2", "mine", "dey-9"]);
+  });
+  test("an interactive lane without a directory is never treated as abandoned", () => {
+    const added = addLane(registry, lane, NOW_ISO, abandonedLanes(registry, new Set(["dey-1", "dey-2"])));
+    expect(added?.slot).toBe(4);
+    expect(added?.registry.lanes.map((l) => l.slug)).toContain("mine");
+  });
+  test("nothing abandoned keeps the registry object when the lane exists", () => {
+    const existing = { version: "1.0.0", updatedAt: "old", lanes: [{ slug: "dey-9", slot: 2 }] };
+    expect(addLane(existing, lane, NOW_ISO, new Set())?.registry).toBe(existing);
+  });
+});
+
+describe("lowestFreeSlot", () => {
+  const lanes = (...slots: unknown[]) => slots.map((slot) => ({ slot }));
+  test.each([
+    ["no lanes", [], 1],
+    ["slot 1 taken", lanes(1), 2],
+    ["gap", lanes(1, 3), 2],
+    ["unsorted", lanes(3, 1, 2), 4],
+    ["lanes without slots", lanes(undefined, undefined), 1],
+    ["ignores invalid slots", lanes(0, -1, 1.5, "2", null), 1],
+    ["duplicates", lanes(1, 1, 2), 3],
+  ])("%s", (_name, input, expected) => {
+    expect(lowestFreeSlot(input)).toBe(expected);
   });
 });
 
@@ -248,6 +339,24 @@ describe("loadConfig", () => {
     expect(config.timeoutWorkMs).toBe(60 * 60_000);
     expect(config.opencodeUrl).toBe("http://opencode:4096");
     expect(config.once).toBe(false);
+    expect(config.opencodeUsername).toBe("opencode");
+    expect(config.opencodePassword).toBe("p");
+    expect(config.maxAutomated).toBe(3);
+  });
+  test("projects root: optional, absolute, trailing slashes trimmed", () => {
+    expect(loadConfig(env, []).projectsRoot).toBeNull();
+    expect(loadConfig({ ...env, KANBAN_PROJECTS_ROOT: "" }, []).projectsRoot).toBeNull();
+    expect(loadConfig({ ...env, KANBAN_PROJECTS_ROOT: "/srv/projects/" }, []).projectsRoot).toBe("/srv/projects");
+    expect(() => loadConfig({ ...env, KANBAN_PROJECTS_ROOT: "projects" }, [])).toThrow(ConfigError);
+  });
+  test("reads the server username and the pool size", () => {
+    const config = loadConfig({ ...env, OPENCODE_SERVER_USERNAME: "u", KANBAN_MAX_AUTOMATED: "5" }, []);
+    expect(config).toMatchObject({ opencodeUsername: "u", maxAutomated: 5 });
+  });
+  test("the pool size must be a positive integer", () => {
+    for (const value of ["0", "1.5", "-1", "x"]) {
+      expect(() => loadConfig({ ...env, KANBAN_MAX_AUTOMATED: value }, [])).toThrow(ConfigError);
+    }
   });
   test("parses flags and overrides", () => {
     const config = loadConfig({ ...env, KANBAN_TEAM: "ABC" }, ["--once", "--dry-run"]);
@@ -257,24 +366,5 @@ describe("loadConfig", () => {
     expect(() => loadConfig({ OPENCODE_SERVER_PASSWORD: "p" }, [])).toThrow(ConfigError);
     expect(() => loadConfig({ ...env, KANBAN_POLL_INTERVAL: "abc" }, [])).toThrow(ConfigError);
     expect(() => loadConfig(env, ["--nope"])).toThrow(ConfigError);
-  });
-});
-
-describe("buildArgs", () => {
-  test("passes the message as the last single argument and --dir when known", () => {
-    const args = buildArgs({
-      opencodeBin: "opencode", url: "http://o:4096", agent: "ticket-investigator",
-      command: "investigate-ticket", message: "DEY-1 why; rm -rf /", dir: "/repo", timeoutMs: 1,
-    });
-    expect(args).toEqual([
-      "run", "--attach", "http://o:4096", "--agent", "ticket-investigator",
-      "--command", "investigate-ticket", "--dir", "/repo", "DEY-1 why; rm -rf /",
-    ]);
-  });
-  test("omits --dir without a path", () => {
-    const args = buildArgs({
-      opencodeBin: "o", url: "u", agent: "a", command: "c", message: "DEY-1", dir: null, timeoutMs: 1,
-    });
-    expect(args).not.toContain("--dir");
   });
 });
