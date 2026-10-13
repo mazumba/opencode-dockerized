@@ -130,8 +130,8 @@ A pending set holds projects whose main checkout may be behind: every project on
 
 ## Required env
 
-1. Always: `LINEAR_API_KEY`, `OPENCODE_SERVER_PASSWORD`, `KANBAN_GH_APP_ID`, `KANBAN_GH_APP_PRIVATE_KEY_PATH`.
-2. IF the App is installed on more than one account THEN `KANBAN_GH_APP_INSTALLATION_ID`. The poller App needs `contents: write` (clean auto-merge push) besides read access to pull requests, checks, statuses, actions, and metadata.
+1. Always: `LINEAR_API_KEY`, `OPENCODE_SERVER_PASSWORD`, `GH_APP_ID`, `GH_APP_PRIVATE_KEY_PATH` (the github plugin's App).
+2. IF the App is installed on more than one account THEN `GH_APP_INSTALLATION_ID`. The App needs Contents, Issues and Pull requests read & write, plus Checks, Commit statuses and Actions read-only (review gate, failed-run logs).
 3. Optional: `KANBAN_MAX_AUTOMATED` (default 3), `KANBAN_CI_PENDING_TIMEOUT` (minutes, default 30), `KANBAN_TIMEOUT_WORK|REVIEW|INVESTIGATE`, `KANBAN_POLL_INTERVAL`, `OPENCODE_SERVER_USERNAME` (default `opencode`; set it only if the server uses another).
 4. `KANBAN_PROJECTS_ROOT` (absolute path, optional): parent of the default checkouts `<root>/<repo name>`. Needed unless every project description has `path:`.
 5. Projects directory (the root, and any explicit `path:`) mounted into `kanban-poller` AND `opencode` at the same real host path (`compose.override.yml`): the Docker daemon resolves lane stack bind mounts on the host.
@@ -140,8 +140,8 @@ A pending set holds projects whose main checkout may be behind: every project on
 
 ## Troubleshoot (match the log event or symptom)
 
-1. `startup failed` / `set KANBAN_GH_APP_INSTALLATION_ID` THEN set that var, or fix App ID and key path.
-2. compose: `KANBAN_GH_APP_* is not set` THEN add both vars to `.env` (same values as `GH_APP_*` is fine).
+1. `startup failed` / `set GH_APP_INSTALLATION_ID` THEN set that var, or fix App ID and key path.
+2. compose: `GH_APP_* is not set` THEN set up the github plugin's App in `.env` (README "GitHub plugin").
 3. `pass.error kind=linear` THEN read the GraphQL message; IF a state or label is missing THEN create it in Linear with the exact name.
 4. `review.wait` repeating for one ticket THEN check `gh pr checks <n> --repo <repo>`; IF a check never finishes THEN fix CI; after `KANBAN_CI_PENDING_TIMEOUT` min the ticket goes to `Needs human` ("CI pending for more than <n> min").
 5. `review.github-error` / `fix.github-error` / `work.github-error` THEN run the same `gh` call by hand; IF 403/404 THEN the App lacks a permission or is not installed on the repo.

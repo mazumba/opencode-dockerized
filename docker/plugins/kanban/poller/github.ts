@@ -177,7 +177,7 @@ export async function ensureInstallationId(deps: InstallationDeps = defaultDeps(
   const list = Array.isArray(installations) ? installations : [];
   if (list.length !== 1 || typeof list[0]?.id !== "number") {
     throw new GitHubError(
-      `found ${list.length} GitHub App installations; set KANBAN_GH_APP_INSTALLATION_ID`,
+      `found ${list.length} GitHub App installations; set GH_APP_INSTALLATION_ID`,
     );
   }
   env.GH_APP_INSTALLATION_ID = String(list[0].id);

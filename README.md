@@ -53,7 +53,7 @@ services:
 cp .env.dist .env
 ```
 
-With the kanban plugin, also set `KANBAN_GH_APP_*` and `KANBAN_PROJECTS_ROOT` (the projects path from step 1). See the [kanban env table](#kanban-plugin).
+With the kanban plugin, also set `KANBAN_PROJECTS_ROOT` (the projects path from step 1). The poller uses the github plugin's App. See the [kanban env table](#kanban-plugin).
 
 Set a password for the web UI and server API in `.env`. The container refuses to start without one:
 
@@ -191,6 +191,9 @@ The `github` plugin installs `gh` and configures git to authenticate as a **GitH
 | Contents | Read & write |
 | Issues | Read & write |
 | Pull requests | Read & write |
+| Checks | Read-only (kanban poller: review gate) |
+| Commit statuses | Read-only (kanban poller: review gate) |
+| Actions | Read-only (kanban poller: failed-run logs) |
 | Everything else | No access |
 
 **2. Generate a private key** on the App's page — downloads a `.pem` file. Note the **App ID** shown at the top of the page.
@@ -341,7 +344,7 @@ The projects root (or each explicit `path:`) must be mounted at the same path in
 
 #### Poller
 
-The poller is an optional container that runs the agent commands unattended. It reuses the opencode image, talks to Linear, and starts agent runs as sessions on the `opencode` container over HTTP. It reads PRs and CI checks, and runs `git fetch`, through its own GitHub App credentials (`KANBAN_GH_APP_ID`, `KANBAN_GH_APP_PRIVATE_KEY_PATH`, see below). It needs your projects directory mounted at the same path as in `opencode` (the `kanban-poller:` service in `compose.override.yml`, see `compose.override.yml.dist`) and the Docker socket (for lane teardown, see below). No ports. It keeps no state; stale claims are recovered on every pass.
+The poller is an optional container that runs the agent commands unattended. It reuses the opencode image, talks to Linear, and starts agent runs as sessions on the `opencode` container over HTTP. It reads PRs and CI checks and runs `git clone`, `fetch` and `push` with the github plugin's App (`GH_APP_*`, see below). It needs your projects directory mounted at the same path as in `opencode` (the `kanban-poller:` service in `compose.override.yml`, see `compose.override.yml.dist`) and the Docker socket (for lane teardown, see below). No ports. It keeps no state; stale claims are recovered on every pass.
 
 **Who writes what.** The poller makes every Linear write (state, labels, comments, reactions). The agents have no Linear access. Before a run, the poller writes the whole ticket (description, attachments, all comments oldest to newest with an `isPoller` flag, state history) to `<path>/.slim/worktrees/.tickets/<ID>.json` and passes the path as `ctx.ticketFile`; it deletes the file when the run ends. The agent ends its reply with one line `KANBAN-RESULT: <json>` (the worker reports the PR number, the reviewer `approve` or `changes` with a one-line summary, the investigator `done` after writing its report file, any of them `needs-human` with a step and reason). The poller validates the line and applies the result: a missing or invalid line, a timeout, or an agent error sends the ticket to `Needs human` with the reason. The worker's PR number is checked against GitHub before the ticket moves to `Agent review`.
 
@@ -409,9 +412,6 @@ If the 👀 reaction cannot be added, nothing runs and the poller retries on the
 |----------|---------|---------|
 | `LINEAR_API_KEY` | required | Linear API key (shared with the `linear` plugin) |
 | `OPENCODE_SERVER_PASSWORD` | required | password of the opencode server the poller attaches to |
-| `KANBAN_GH_APP_ID` | required | ID of the GitHub App the poller uses |
-| `KANBAN_GH_APP_PRIVATE_KEY_PATH` | required | host path to that App's private key (`.pem`), mounted read-only |
-| `KANBAN_GH_APP_INSTALLATION_ID` | empty | only needed if the App is installed on more than one account |
 | `KANBAN_TEAM` | `DEY` | Linear team key |
 | `KANBAN_POLL_INTERVAL` | `60` | seconds between passes |
 | `KANBAN_PROJECTS_ROOT` | empty | absolute path of the directory that holds the checkouts: a project without `path:` uses `<root>/<repo name>` and is cloned there if missing. Mount it at the same path in both containers |
@@ -422,7 +422,7 @@ If the 👀 reaction cannot be added, nothing runs and the poller retries on the
 | `KANBAN_TIMEOUT_REVIEW` | `20` | minutes before a review run is aborted |
 | `KANBAN_TIMEOUT_INVESTIGATE` | `20` | minutes before an investigation is aborted |
 
-The `KANBAN_GH_APP_*` variables are required whenever `kanban` is in `PLUGINS`; compose refuses to start without them. To reuse the `github` plugin's App, set them to the same values as `GH_APP_ID` and `GH_APP_PRIVATE_KEY_PATH`. The poller reads PRs, checks, and run logs, and runs `git fetch` and one `git push` (the clean base merge, see below). You can create a separate App for it with these repository permissions: Pull requests, Checks, Commit statuses, Actions (for failed-run logs), and Metadata, all read-only, and Contents: read and write. Only Contents needs write access, and only for that push. Worktree and branch cleanup uses local git only. If you reuse the `github` plugin's App, it must have Contents: write too, or the auto-merge push fails and the conflict goes to the agent as before.
+The poller uses the `github` plugin's App: `GH_APP_ID`, `GH_APP_PRIVATE_KEY_PATH` and, if needed, `GH_APP_INSTALLATION_ID` (see [GitHub plugin](#github-plugin)). Compose refuses to start the poller without them. Besides the plugin's write permissions, the App needs Checks, Commit statuses and Actions read-only. Without them the review gate fails with `review.github-error` and CI failures get no log tail. The poller clones missing checkouts, fetches, and pushes one thing: the clean base merge into a conflicting PR branch (never forced). Worktree and branch cleanup uses local git only.
 
 The poller logs only ticket identifiers, actions, results, and durations: never the key, comment text, or ticket text. It exits with an error at startup if a required variable is missing, or if a state or label name is missing in Linear.
 
