@@ -41,6 +41,10 @@ services:
   opencode:
     volumes:
       - /full/path/to/my/projects:/full/path/to/my/projects
+  # Only with the kanban plugin: the same path again.
+  kanban-poller:
+    volumes:
+      - /full/path/to/my/projects:/full/path/to/my/projects
 ```
 
 **2. Environment file** — sets local configuration variables.
@@ -48,6 +52,8 @@ services:
 ```sh
 cp .env.dist .env
 ```
+
+With the kanban plugin, also set `KANBAN_GH_APP_*` and `KANBAN_PROJECTS_ROOT` (the projects path from step 1). See the [kanban env table](#kanban-plugin).
 
 Set a password for the web UI and server API in `.env`. The container refuses to start without one:
 
