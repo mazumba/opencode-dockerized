@@ -21,15 +21,15 @@
       },
       "oracle": {
         "model": "github-copilot/claude-opus-5.5",
-        "variant": "high",
+        "variant": "medium",
         "skills": [
           "simplify"
         ],
         "mcps": []
       },
       "librarian": {
-        "model": "github-copilot/claude-opus-5.5",
-        "variant": "low",
+        "model": "github-copilot/claude-haiku-5.5",
+        "variant": "medium",
         "skills": [],
         "mcps": [
           "websearch",
@@ -38,8 +38,8 @@
         ]
       },
       "explorer": {
-        "model": "github-copilot/claude-sonnet-5.5",
-        "variant": "low",
+        "model": "github-copilot/claude-haiku-5.5",
+        "variant": "medium",
         "skills": [],
         "mcps": []
       },
@@ -50,7 +50,7 @@
         "mcps": []
       },
       "fixer": {
-        "model": "github-copilot/claude-sonnet-5.5",
+        "model": "github-copilot/gpt-6.1-sol",
         "variant": "medium",
         "skills": [],
         "mcps": []
