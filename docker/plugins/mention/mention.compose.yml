@@ -1,0 +1,48 @@
+# Plugin: mention — Compose fragment
+# Reuses the opencode image for the optional mention-poller service (profile
+# "mention-poller"). It handles authorized PR mentions through the opencode
+# server and the github plugin's App: metadata and collaborator permissions
+# (read), issues/PR comments and reactions (read/write), and repository contents
+# (read/write for clone, fetch and pushes). Explicitly requested rebases use an
+# exact force-with-lease; ordinary changes are pushed without force.
+#
+# No Docker socket or published ports. The sidecar bypasses plugin entrypoint
+# hooks and drops to the opencode user. MENTION_PROJECTS_ROOT contains checkouts
+# and isolated worktrees; mount it at the same absolute host path in opencode
+# via compose.override.yml so the server can access the prepared directories.
+services:
+  opencode:
+    image: opencode-dockerized-opencode:local
+  mention-poller:
+    image: opencode-dockerized-opencode:local
+    pull_policy: never
+    profiles: ["mention-poller"]
+    entrypoint:
+      - /bin/sh
+      - -c
+      - exec gosu opencode /home/opencode/.bun/bin/bun /usr/local/lib/opencode/mention-poller/poller.ts "$$@"
+      - mention-poller
+    command: []
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 60s
+    depends_on:
+      - opencode
+    volumes:
+      - '${GH_APP_PRIVATE_KEY_PATH:?GH_APP_PRIVATE_KEY_PATH is not set. Set it in .env (see README "Mention plugin")}:/run/secrets/github-app.pem:ro'
+      - '${MENTION_PROJECTS_ROOT:?MENTION_PROJECTS_ROOT is not set. Set it in .env (see README "Mention plugin")}:${MENTION_PROJECTS_ROOT}'
+    environment:
+      GH_APP_ID: '${GH_APP_ID:?GH_APP_ID is not set. Set it in .env (see README "Mention plugin")}'
+      GH_APP_INSTALLATION_ID: ${GH_APP_INSTALLATION_ID:-}
+      OPENCODE_SERVER_PASSWORD: '${OPENCODE_SERVER_PASSWORD:?OPENCODE_SERVER_PASSWORD is not set. Set it in .env (see README "Mention plugin")}'
+      OPENCODE_SERVER_USERNAME: ${OPENCODE_SERVER_USERNAME:-opencode}
+      MENTION_HANDLE: ${MENTION_HANDLE:-}
+      MENTION_BOT_LOGIN: ${MENTION_BOT_LOGIN:-}
+      MENTION_ALLOWED_USERS: '${MENTION_ALLOWED_USERS:?MENTION_ALLOWED_USERS is not set. Set it in .env (see README "Mention plugin")}'
+      MENTION_ALLOWED_ROLES: ${MENTION_ALLOWED_ROLES:-admin,maintain}
+      MENTION_PROJECTS_ROOT: '${MENTION_PROJECTS_ROOT:?MENTION_PROJECTS_ROOT is not set. Set it in .env (see README "Mention plugin")}'
+      MENTION_POLL_INTERVAL: ${MENTION_POLL_INTERVAL:-60}
+      MENTION_LOOKBACK_HOURS: ${MENTION_LOOKBACK_HOURS:-24}
+      MENTION_TIMEOUT: ${MENTION_TIMEOUT:-45}
+      MENTION_MAX_CONCURRENT: ${MENTION_MAX_CONCURRENT:-2}
+      MENTION_OPENCODE_URL: ${MENTION_OPENCODE_URL:-http://opencode:4096}

@@ -1,7 +1,9 @@
 services:
   opencode:
     volumes:
-#     IMPORTANT: Use the full path to your projects directory to avoid dind volume mounting issues:
+#     IMPORTANT: Use the full path to your projects directory to avoid dind volume mounting issues.
+#     With the mention plugin this must also be MENTION_PROJECTS_ROOT (the
+#     mention-poller service mounts that path itself):
       - /full/path/to/my/projects:/full/path/to/my/projects
 #     Mount your auth.json file here, if you have one:
       - ./.opencode/share/auth.json:/home/opencode/.local/share/opencode/auth.json
