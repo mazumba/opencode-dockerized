@@ -85,7 +85,8 @@ export function excludeAppend(content: string | null): string | null {
   if (existing.split(/\r?\n/).some((line) => line.trim() === "/.slim/worktrees/")) return null;
   return `${existing}${existing === "" || existing.endsWith("\n") ? "" : "\n"}/.slim/worktrees/\n`;
 }
-export type ParsedResult = { ok: true; result: { outcome: "replied" } | { outcome: "failed"; reason: string } } | { ok: false; reason: string };
+// "silent" means the agent deliberately posted no reply (a clean rebase), so the poller must not post its fallback.
+export type ParsedResult = { ok: true; result: { outcome: "replied" } | { outcome: "silent" } | { outcome: "failed"; reason: string } } | { ok: false; reason: string };
 export function parseResult(output: string): ParsedResult {
   let payload: string | null = null;
   for (const line of output.split(/\r?\n/)) {
@@ -97,6 +98,7 @@ export function parseResult(output: string): ParsedResult {
   try { value = JSON.parse(payload); } catch { return { ok: false, reason: "marker is not JSON" }; }
   if (value && typeof value === "object" && "outcome" in value) {
     if (value.outcome === "replied" && Object.keys(value).length === 1) return { ok: true, result: { outcome: "replied" } };
+    if (value.outcome === "silent" && Object.keys(value).length === 1) return { ok: true, result: { outcome: "silent" } };
     if (value.outcome === "failed" && "reason" in value && typeof value.reason === "string" && value.reason.trim() && Object.keys(value).length === 2) {
       return { ok: true, result: { outcome: "failed", reason: value.reason.replace(/\s+/g, " ").trim().slice(0, 200) } };
     }

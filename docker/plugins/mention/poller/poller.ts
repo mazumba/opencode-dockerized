@@ -114,12 +114,16 @@ export function createPoller(config: Config, gh = createGh(config.dryRun), git =
       });
       keepLocked = result.stuck;
       const parsed = parseResult(result.output);
-      const reason = result.error || result.timedOut || result.aborted || result.stuck
-        ? describeRun(result)
-        : !parsed.ok ? parsed.reason
-          : parsed.result.outcome === "failed" ? parsed.result.reason : "agent posted no reply";
-      await replyIfMissing(`@${comment.user.login} mention-poller: run failed — ${reason}`);
-      log("run.result", { repo, pr, marker: parsed.ok, stuck: result.stuck, timedOut: result.timedOut, aborted: result.aborted });
+      const runFailed = Boolean(result.error || result.timedOut || result.aborted || result.stuck);
+      const silent = !runFailed && parsed.ok && parsed.result.outcome === "silent";
+      if (!silent) {
+        const reason = runFailed
+          ? describeRun(result)
+          : !parsed.ok ? parsed.reason
+            : parsed.result.outcome === "failed" ? parsed.result.reason : "agent posted no reply";
+        await replyIfMissing(`@${comment.user.login} mention-poller: run failed — ${reason}`);
+      }
+      log("run.result", { repo, pr, marker: parsed.ok, outcome: parsed.ok ? parsed.result.outcome : null, stuck: result.stuck, timedOut: result.timedOut, aborted: result.aborted });
     } catch (error) {
       // Only known fixed diagnostics reach replies; never CLI stderr, transcripts or bodies.
       const reason = reasonOf(error);
