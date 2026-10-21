@@ -77,6 +77,15 @@ describe("poller lifecycle", () => {
     const f = fixture({ replied: true, runResult: { ...result, output: 'MENTION-RESULT: {"outcome":"failed","reason":"blocked"}' } });
     await f.poller.pass(now); await f.poller.drain(); expect(f.writes).toEqual(["eyes"]);
   });
+  test("silent marker on a clean run posts no reply", async () => {
+    const f = fixture({ runResult: { ...result, output: 'MENTION-RESULT: {"outcome":"silent"}' } });
+    await f.poller.pass(now); await f.poller.drain(); expect(f.writes).toEqual(["eyes"]);
+  });
+  test("silent marker does not hide a timed-out run", async () => {
+    const f = fixture({ runResult: { ...result, timedOut: true, output: 'MENTION-RESULT: {"outcome":"silent"}' } });
+    await f.poller.pass(now); await f.poller.drain();
+    expect(f.writes).toHaveLength(2); expect(f.writes[1]).toStartWith("@alice mention-poller: run failed — ");
+  });
   test("prep failure is claimed and reported without leaking arbitrary errors", async () => {
     const f = fixture({ prepError: true }); await f.poller.pass(now); await f.poller.drain();
     expect(f.writes).toEqual(["eyes", "@alice mention-poller failed: internal error"]); expect(f.events).not.toContain("run");

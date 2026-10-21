@@ -23,10 +23,11 @@ The poller-supplied context has `repo`, `pr`, `url`, `baseRef`, `headRef`, `head
 - After a successful rebase, if `ctx.pushable`, use exactly the explicit lease form: `git -c credential.helper= -c 'credential.helper=!gh auth git-credential' -c remote.origin.url=https://github.com/<repo>.git -c remote.origin.pushurl=https://github.com/<repo>.git push --force-with-lease=refs/heads/<headRef>:<headSha> origin HEAD:<headRef>` (argument array, substitute `ctx.repo`, `ctx.headRef`, and the original `ctx.headSha`). Plain `--force` and `+refspec` pushes remain forbidden. Never replace the lease with an inferred or newer SHA.
 - If the lease is rejected, do not retry, refetch, or rebase again. Keep the rebased commits in the worktree and report the rejection, worktree path, and target branch in the reply.
 - Fork PRs (`pushable=false`): rebase locally when explicitly requested, never push. Give manual push instructions using the fork's HTTPS remote and an explicit lease against the original `headSha`; the user must review the remote state before pushing. Never push fork changes to the base repository.
-- The single reply must include the old head (`ctx.headSha`), new head SHA (`git rev-parse HEAD`), conflicted files and their resolutions (or why the rebase was aborted), and test results. State explicitly when there were no conflicts. Keep the normal exactly-one-reply contract above.
+- Stay silent on a clean rebase: when the triggering comment asked only to rebase, the rebase had no conflicts, the lease push succeeded, and the relevant tests passed, post NO comment and end with `MENTION-RESULT: {"outcome":"silent"}` instead of `replied`. This is the only case where you may skip the reply.
+- Otherwise (conflicts resolved, rebase aborted, lease or push rejected, `pushable=false`, failing tests, or other requests in the same comment), post the single reply. It must include the old head (`ctx.headSha`), new head SHA (`git rev-parse HEAD`), conflicted files and their resolutions (or why the rebase was aborted), and test results. Keep the normal exactly-one-reply contract above.
 
 Last line of your final assistant message, with nothing after it:
 
 `MENTION-RESULT: {"outcome":"replied"}`
 
-If the run failed, use instead `MENTION-RESULT: {"outcome":"failed","reason":"<short, no secrets>"}`. Never claim a reply was posted if it was not.
+After a clean rebase without a reply (see "Updating from base"), use instead `MENTION-RESULT: {"outcome":"silent"}`. If the run failed, use instead `MENTION-RESULT: {"outcome":"failed","reason":"<short, no secrets>"}`. Never claim a reply was posted if it was not, and never report `silent` for anything but a clean rebase.

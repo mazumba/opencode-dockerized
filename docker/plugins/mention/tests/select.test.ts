@@ -86,11 +86,13 @@ describe("result markers", () => {
     '**MENTION-RESULT:** {"outcome":"replied"}',
     '> - MENTION-RESULT: {"outcome":"replied"}',
   ]) test(line, () => expect(parseResult(line)).toEqual({ ok: true, result: { outcome: "replied" } }));
+  test("silent outcome", () => expect(parseResult('MENTION-RESULT: {"outcome":"silent"}')).toEqual({ ok: true, result: { outcome: "silent" } }));
   test("last marker wins", () => expect(parseResult('MENTION-RESULT: {"outcome":"replied"}\nMENTION-RESULT: {"outcome":"failed","reason":"blocked"}')).toEqual({ ok: true, result: { outcome: "failed", reason: "blocked" } }));
   for (const [output, reason] of [
     ["none", "marker missing"], ["MENTION-RESULT: nope", "marker is not JSON"],
     ['MENTION-RESULT: {"outcome":"failed"}', "marker invalid"],
     ['MENTION-RESULT: {"outcome":"replied","extra":1}', "marker invalid"],
+    ['MENTION-RESULT: {"outcome":"silent","reason":"x"}', "marker invalid"],
     ['MENTION-RESULT: {"outcome":"unknown"}', "marker invalid"],
   ]) test(reason + output, () => expect(parseResult(output)).toEqual({ ok: false, reason }));
 });
