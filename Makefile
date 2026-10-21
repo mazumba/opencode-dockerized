@@ -37,3 +37,19 @@ kanban-poller-once: ## run a single kanban poller pass, performing real actions
 
 kanban-poller-dry-run: ## run a single kanban poller pass without writes or agent runs
 	docker/compose-with-plugins.sh --profile kanban-poller run --rm kanban-poller --once --dry-run
+
+mention-poller-run: ## start the mention poller (needs the mention plugin in PLUGINS)
+	docker/compose-with-plugins.sh --profile mention-poller up -d mention-poller
+
+mention-poller-logs: ## follow the mention poller logs
+	docker/compose-with-plugins.sh --profile mention-poller logs -f mention-poller
+
+mention-poller-down: ## stop and remove the mention poller
+	docker/compose-with-plugins.sh --profile mention-poller stop mention-poller
+	docker/compose-with-plugins.sh --profile mention-poller rm -f mention-poller
+
+mention-poller-once: ## run a single mention poller pass, performing real actions
+	docker/compose-with-plugins.sh --profile mention-poller run --rm mention-poller --once
+
+mention-poller-dry-run: ## run a single mention poller pass without writes or agent runs
+	docker/compose-with-plugins.sh --profile mention-poller run --rm mention-poller --once --dry-run
