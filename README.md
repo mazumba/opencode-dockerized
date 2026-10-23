@@ -70,7 +70,7 @@ The container runs as a non-root user matching your host `UID`/`GID` (detected a
 To pin a specific OpenCode version, set `OPENCODE_VERSION` in `.env`:
 
 ```sh
-OPENCODE_VERSION=1.15.4
+OPENCODE_VERSION=1.19.4
 ```
 
 ## Plugins
