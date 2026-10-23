@@ -1,7 +1,7 @@
 # Plugin: <name>
 # <Short description of what this plugin adds>
 #
-# Plugin convention: each plugin lives in docker/plugins/<name>/ and may carry up to eight files:
+# Plugin convention: each plugin lives in docker/plugins/<name>/ and may carry up to nine files:
 #
 #   <name>.dockerfile        — system/apt dependencies (required)
 #                              Injected into Dockerfile.generated at the "# {{plugins}}" marker.
@@ -59,7 +59,15 @@
 #                              commands that were not installed by a plugin are never
 #                              overwritten; a name clash is a build error.
 #
-# Only <name>.dockerfile is required; the other seven are optional.
+#   <name>.skills/           — agent skills (optional)
+#                              Directory of skill folders (<skill>/SKILL.md); the
+#                              frontmatter "name" must equal the folder name. Copied into
+#                              .opencode/config/skills/plugins/, a git-ignored directory
+#                              regenerated on every build, so disabling the plugin removes
+#                              its skills. A name clash with any other skill is a build
+#                              error.
+#
+# Only <name>.dockerfile is required; the other eight are optional.
 #
 # To activate: set PLUGINS=<name> in .env and run `make opencode-build-plugins`.
 #

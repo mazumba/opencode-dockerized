@@ -82,10 +82,10 @@ Available plugins:
 
 | Plugin    | Adds |
 |-----------|------|
-| `midi`    | `fluidsynth`, `timidity`, `mido`, `pretty_midi`, `music21`, and related Python audio libraries |
-| `excel`   | `openpyxl` for reading and writing `.xlsx` files |
+| `midi`    | `fluidsynth`, `timidity`, `mido`, `pretty_midi`, `music21`, and related Python audio libraries, plus a `midi` skill |
+| `excel`   | `openpyxl` for reading and writing `.xlsx` files, plus an `excel` skill |
 | `browser` | Playwright Chromium (headless, MCP-controlled) — see [Browser MCP](#browser-mcp-playwright) below |
-| `image`   | `vips` for creating AVIF and WebP images — see [Image plugin](#image-plugin) below |
+| `image`   | `vips` for creating AVIF and WebP images, plus an `image` skill — see [Image plugin](#image-plugin) below |
 | `github`  | GitHub CLI (`gh`) and git, authenticated as a GitHub App — see [GitHub plugin](#github-plugin) below |
 | `linear`  | Linear remote MCP and a `linear` subagent, authenticated with a Linear API key — see [Linear plugin](#linear-plugin) below |
 | `kanban`  | Linear kanban workflow: agents implement and review tickets, you merge. Requires `linear` and `github` — see [Kanban plugin](#kanban-plugin) below |
@@ -136,7 +136,7 @@ make opencode-run
 
 ### Image plugin
 
-The `image` plugin installs `vips` (via `libvips-tools`) so the agent can create AVIF and WebP images, for example for a website. `vips` is a CLI tool the agent runs per file.
+The `image` plugin installs `vips` (via `libvips-tools`) so the agent can create AVIF and WebP images, for example for a website. `vips` is a CLI tool the agent runs per file. The plugin's `image` skill tells the agent which `vips` commands and options to use.
 
 **Opt-in:**
 
@@ -414,7 +414,7 @@ The poller logs only ticket identifiers, actions, results, and durations: never 
 
 ### Adding a new plugin
 
-Each plugin lives in its own subdirectory `docker/plugins/<name>/` and may include up to eight files:
+Each plugin lives in its own subdirectory `docker/plugins/<name>/` and may include up to nine files:
 
 | File | Purpose | Required |
 |---|---|---|
@@ -422,10 +422,11 @@ Each plugin lives in its own subdirectory `docker/plugins/<name>/` and may inclu
 | `<name>.package.json` | npm deps merged into `.opencode/config/package.json` at build time | No |
 | `<name>.opencode.jsonc` | MCP config fragment injected into `opencode.jsonc` at build time | No |
 | `<name>.agent.jsonc` | agent fragment injected at `// {{agent-plugins}}`. If the plugin also ships an MCP fragment, that server's `<server>_*` tools are denied for all other agents at `// {{permission-plugins}}` (see [Browser MCP](#browser-mcp-playwright)) | No |
-| `<name>.entrypoint.sh` | startup hook run as root before the privilege drop (see [Image plugin](#image-plugin) for an example) | No |
+| `<name>.entrypoint.sh` | startup hook run as root before the privilege drop (see [GitHub plugin](#github-plugin) for an example) | No |
 | `<name>.compose.yml` | Compose fragment layered onto `compose.yml` via `docker/compose-with-plugins.sh` | No |
 | `<name>.requires` | plugin names this plugin depends on, one per line (`#` comments and blank lines ignored). The build fails if one is missing from `PLUGINS` | No |
 | `<name>.commands/` | slash-command files (`<command>.md`) copied into `.opencode/config/commands/` on build and removed again when the plugin is disabled (tracked in `.opencode/config/commands/.plugin-commands`). The build fails if a file would overwrite an existing command or another plugin's command | No |
+| `<name>.skills/` | skill folders (`<skill>/SKILL.md`, frontmatter `name` equal to the folder name) copied into `.opencode/config/skills/plugins/` on build. That directory is regenerated on every build and git-ignored, so disabling a plugin removes its skills. The build fails if a skill name clashes with an existing skill or another plugin's skill | No |
 
 Copy the template for the Dockerfile layer:
 

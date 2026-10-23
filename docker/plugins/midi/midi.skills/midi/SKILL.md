@@ -26,6 +26,5 @@ ffmpeg -loglevel error -y -i out.wav -q:a 2 out.mp3
 ```
 
 - From Python, `pretty_midi.PrettyMIDI(p).fluidsynth(fs=44100)` returns a mono NumPy array. Write it with `soundfile.write`.
-- Run `timidity` with `-c /etc/timidity/timgm6mb.cfg`. Its default config points to a SoundFont that is not installed.
 
 Verify by checking that the output is non-empty and has the expected duration: `soundfile.info("out.wav").duration`, or `pm.get_end_time()` for MIDI.
