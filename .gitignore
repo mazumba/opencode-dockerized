@@ -11,6 +11,7 @@
 !.opencode/config/commands/skill.md
 !.opencode/config/commands/update-plan.md
 !.opencode/config/skills
+.opencode/config/skills/plugins/
 !.opencode/config/skills-lock.json
 !.opencode/config/tools
 !.opencode/config/opencode.jsonc.base.dist
