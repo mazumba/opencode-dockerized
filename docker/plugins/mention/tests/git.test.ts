@@ -20,7 +20,7 @@ for (const fork of [false, true]) test(`detached worktree preparation (${fork ? 
     return { code: 0, stdout, stderr: "", timedOut: false };
   };
   try {
-    expect(await createGit(run).prepare(root, "org/repo", 12, "feature/test", "main", !fork)).toEqual({ worktree, headSha: "a".repeat(40), baseSha: "b".repeat(40) });
+    expect(await createGit(run).prepare(root, "org/repo", 12, "feature/test", "main", !fork)).toEqual({ worktree, headSha: "a".repeat(40), baseSha: "b".repeat(40), discarded: false });
     const fetch = calls.find((args) => args.includes("fetch"))!;
     expect(fetch).toContain("credential.helper=");
     expect(fetch).toContain("credential.helper=!gh auth git-credential");
@@ -35,26 +35,67 @@ for (const fork of [false, true]) test(`detached worktree preparation (${fork ? 
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
-test("existing dirty worktree is never checked out or reset", async () => {
+async function reusedWorktreeFixture(options: { dirty: boolean; rebasing: boolean; localHead?: string }) {
   const root = await mkdtemp("/tmp/opencode/mention-test-");
   const checkout = join(root, "repo");
   const worktree = join(checkout, ".slim/worktrees/mention-pr-12");
+  const gitDir = join(checkout, ".git/worktrees/mention-pr-12");
   await mkdir(worktree, { recursive: true });
+  if (options.rebasing) await mkdir(join(gitDir, "rebase-merge"), { recursive: true });
   const calls: string[][] = [];
+  let dirty = options.dirty;
   const run: Exec = async (args) => {
     calls.push(args);
     let stdout = "";
     if (args.includes("--show-toplevel")) stdout = checkout;
     else if (args.includes("get-url")) stdout = "https://github.com/org/repo.git";
     else if (args.includes("--git-common-dir")) stdout = ".git";
+    else if (args.includes("--git-path")) stdout = join(gitDir, args.at(-1)!);
     else if (args.includes("list")) stdout = `worktree ${checkout}\0\0worktree ${worktree}\0detached\0\0`;
-    else if (args.includes("status")) stdout = " M important.ts";
+    else if (args.includes("status")) stdout = dirty ? " M important.ts\n?? leftover.txt" : "";
+    else if (args.includes("reset")) dirty = false;
+    else if (args.includes("rev-parse")) stdout = args.at(-1) === "HEAD" ? options.localHead ?? "a".repeat(40) : "a".repeat(40);
     return { code: 0, stdout, stderr: "", timedOut: false };
   };
+  const ops = () => calls.map((args) => args.slice(args.indexOf(worktree) + 1)).filter((args) =>
+    ["rebase", "reset", "clean", "checkout"].includes(args[0])).map((args) => args.join(" "));
+  return { root, worktree, calls, ops, git: createGit(run), dispose: () => rm(root, { recursive: true, force: true }) };
+}
+
+test("reused dirty worktree is reset and cleaned before checkout of the PR head", async () => {
+  const f = await reusedWorktreeFixture({ dirty: true, rebasing: false });
   try {
-    await expect(createGit(run).prepare(root, "org/repo", 12, "feature", "main", true)).rejects.toThrow("worktree has uncommitted changes");
-    expect(calls.some((args) => args.includes("checkout") || args.includes("reset"))).toBe(false);
-  } finally { await rm(root, { recursive: true, force: true }); }
+    expect((await f.git.prepare(f.root, "org/repo", 12, "feature", "main", true)).discarded).toBe(true);
+    expect(f.ops()).toEqual(["reset --hard", "clean -fd", "checkout --detach refs/remotes/origin/feature"]);
+    expect(f.calls.some((args) => args.includes("--force") || args.includes("-x"))).toBe(false);
+  } finally { await f.dispose(); }
+});
+
+test("interrupted rebase is quit before the reset", async () => {
+  const f = await reusedWorktreeFixture({ dirty: true, rebasing: true });
+  try {
+    expect((await f.git.prepare(f.root, "org/repo", 12, "feature", "main", true)).discarded).toBe(true);
+    expect(f.ops()).toEqual(["rebase --quit", "reset --hard", "clean -fd", "checkout --detach refs/remotes/origin/feature"]);
+  } finally { await f.dispose(); }
+});
+
+test("commits of an interrupted rebase are saved before checkout", async () => {
+  const local = "c".repeat(40);
+  const f = await reusedWorktreeFixture({ dirty: true, rebasing: true, localHead: local });
+  try {
+    await f.git.prepare(f.root, "org/repo", 12, "feature", "main", true);
+    const order = f.calls.map((args) => args.includes("update-ref") ? "save" : args.includes("checkout") ? "checkout" : null).filter(Boolean);
+    expect(order).toEqual(["save", "checkout"]);
+    expect(f.calls.find((args) => args.includes("update-ref"))!.slice(-3)).toEqual(["update-ref", `refs/mention/saved/pr-12/${local}`, local]);
+  } finally { await f.dispose(); }
+});
+
+test("clean reused worktree is only checked out", async () => {
+  const f = await reusedWorktreeFixture({ dirty: false, rebasing: false });
+  try {
+    expect((await f.git.prepare(f.root, "org/repo", 12, "feature", "main", true)).discarded).toBe(false);
+    expect(f.ops()).toEqual(["checkout --detach refs/remotes/origin/feature"]);
+  } finally { await f.dispose(); }
 });
 
 for (const baseRef of ["", "-main", "main..other", "main;touch", "a/../b"]) test(`invalid baseRef ${JSON.stringify(baseRef)} is rejected before exec`, async () => {

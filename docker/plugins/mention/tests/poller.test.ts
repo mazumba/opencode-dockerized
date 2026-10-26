@@ -39,7 +39,7 @@ function fixture(options: { dryRun?: boolean; replied?: boolean; prepError?: boo
     prepare: async (..._args: Parameters<ReturnType<typeof createGit>["prepare"]>) => {
       events.push("prepare");
       if (options.prepError) throw new Error("private detail");
-      return { worktree: "/projects/repo/.slim/worktrees/mention-pr-1", headSha: "a".repeat(40), baseSha: "b".repeat(40) };
+      return { worktree: "/projects/repo/.slim/worktrees/mention-pr-1", headSha: "a".repeat(40), baseSha: "b".repeat(40), discarded: false };
     },
   };
   const run = async () => { events.push("run"); return options.runResult ?? result; };

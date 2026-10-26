@@ -86,7 +86,8 @@ export function createPoller(config: Config, gh = createGh(config.dryRun), git =
         return false;
       }
       const policy = pushPolicy(repo, pull.head.repo?.full_name ?? null);
-      const { worktree, headSha, baseSha } = await git.prepare(config.projectsRoot, repo, pr, pull.head.ref, pull.base.ref, policy.pushable, controller.signal);
+      const { worktree, headSha, baseSha, discarded } = await git.prepare(config.projectsRoot, repo, pr, pull.head.ref, pull.base.ref, policy.pushable, controller.signal);
+      if (discarded) log("prepare.discard", { repo, pr, path: worktree });
       if (stopping || controller.signal.aborted) return false;
       await claim();
       if (stopping || controller.signal.aborted) {
