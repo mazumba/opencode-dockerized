@@ -8,8 +8,8 @@
   "presets": {
     "copilot": {
       "orchestrator": {
-        "model": "github-copilot/claude-opus-5.5",
-        "variant": "medium",
+        "model": "github-copilot/gpt-6.1-sol",
+        "variant": "high",
         "skills": [
           "*"
         ],
@@ -20,8 +20,8 @@
         ]
       },
       "oracle": {
-        "model": "github-copilot/claude-opus-5.5",
-        "variant": "medium",
+        "model": "github-copilot/gpt-6.1-sol",
+        "variant": "high",
         "skills": [
           "simplify"
         ],
@@ -44,14 +44,14 @@
         "mcps": []
       },
       "designer": {
-        "model": "github-copilot/claude-sonnet-5.5",
-        "variant": "medium",
+        "model": "github-copilot/gpt-6.1-sol",
+        "variant": "high",
         "skills": [],
         "mcps": []
       },
       "fixer": {
         "model": "github-copilot/gpt-6.1-sol",
-        "variant": "medium",
+        "variant": "high",
         "skills": [],
         "mcps": []
       }
