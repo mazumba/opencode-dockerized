@@ -13,6 +13,9 @@ opencode-build: opencode-down ## build opencode container
 opencode-build-plugins: opencode-down ## build with plugins from .env (PLUGINS=<name>,<name>)
 	@bash docker/build-plugins.sh
 
+test-compose: ## check compose.override.yml.dist loads with and without the kanban plugin
+	docker/test-compose-plugins.sh
+
 opencode-run: opencode-down ## run opencode container
 	docker/compose-with-plugins.sh up -d --wait opencode
 	@echo '                                    ▄     '

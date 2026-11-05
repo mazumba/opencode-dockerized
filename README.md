@@ -41,8 +41,10 @@ services:
   opencode:
     volumes:
       - /full/path/to/my/projects:/full/path/to/my/projects
-  # Only with the kanban plugin: the same path again.
+  # Only with the kanban plugin: the same path again. Keep the profile, so builds
+  # without the kanban plugin still load this file.
   kanban-poller:
+    profiles: ["kanban-poller"]
     volumes:
       - /full/path/to/my/projects:/full/path/to/my/projects
 ```

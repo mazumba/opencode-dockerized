@@ -9,6 +9,26 @@
     // {{permission-plugins}}
   },
   "agent": {
+    "plan": {
+      "model": "github-copilot/claude-opus-5.5",
+      "variant": "medium"
+    },
+    "build": {
+      "model": "github-copilot/gpt-6.1-sol",
+      "variant": "high"
+    },
+    "general": {
+      "model": "github-copilot/gpt-6.1-sol",
+      "variant": "high"
+    },
+    "explore": {
+      "model": "github-copilot/gpt-6-luna",
+      "variant": "medium"
+    },
+    "quota": {
+      "model": "github-copilot/gpt-6-luna",
+      "variant": "low"
+    },
     // injection marker for plugin agent fragments; see docker/plugins/plugin.dockerfile.dist for details
     // {{agent-plugins}}
   },

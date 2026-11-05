@@ -1,5 +1,7 @@
 "linear": {
   "mode": "subagent",
+  "model": "github-copilot/gpt-6-luna",
+  "variant": "medium",
   "description": "Linear issue tracker via the Linear MCP. Use for reading, searching, creating, and updating issues, projects, cycles, and comments. Returns compact summaries.",
   "permission": {
     "linear_*": "allow"

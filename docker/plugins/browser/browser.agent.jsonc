@@ -1,5 +1,7 @@
 "browse": {
   "mode": "subagent",
+  "model": "github-copilot/gpt-6-luna",
+  "variant": "medium",
   "description": "Headless browser via Playwright MCP. Use for navigating pages, checking rendering, reading console/network output, and simple UI interaction. Returns compact findings.",
   "permission": {
     "playwright_*": "allow"

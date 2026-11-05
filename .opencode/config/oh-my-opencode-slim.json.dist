@@ -8,8 +8,8 @@
   "presets": {
     "copilot": {
       "orchestrator": {
-        "model": "github-copilot/gpt-6.1-sol",
-        "variant": "high",
+        "model": "github-copilot/claude-opus-5.5",
+        "variant": "medium",
         "skills": [
           "*"
         ],
@@ -20,7 +20,7 @@
         ]
       },
       "oracle": {
-        "model": "github-copilot/gpt-6.1-sol",
+        "model": "github-copilot/claude-opus-5.5",
         "variant": "high",
         "skills": [
           "simplify"
@@ -28,7 +28,7 @@
         "mcps": []
       },
       "librarian": {
-        "model": "github-copilot/claude-haiku-5.5",
+        "model": "github-copilot/gpt-6-luna",
         "variant": "medium",
         "skills": [],
         "mcps": [
@@ -38,7 +38,7 @@
         ]
       },
       "explorer": {
-        "model": "github-copilot/claude-haiku-5.5",
+        "model": "github-copilot/gpt-6-luna",
         "variant": "medium",
         "skills": [],
         "mcps": []

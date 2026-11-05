@@ -8,6 +8,9 @@ services:
 
   # Only with the kanban plugin. Same real host path as opencode, mounted at the
   # same path: KANBAN_PROJECTS_ROOT points here, and lane stacks bind-mount from it.
+  # Keep the profile: without the kanban plugin this stanza has no image, and an
+  # unprofiled service without an image makes every compose command fail.
   kanban-poller:
+    profiles: ["kanban-poller"]
     volumes:
       - /full/path/to/my/projects:/full/path/to/my/projects
