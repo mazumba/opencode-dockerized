@@ -89,7 +89,9 @@ Restart opencode afterwards so it loads the new skill.
 
 ## Custom tools
 
-The custom tool `.opencode/tools/pdftotext.ts` exposes `pdftotext` with these arguments:
+### pdftotext
+
+The custom tool `.opencode/config/tools/pdftotext.ts` exposes `pdftotext` with these arguments:
 
 - `filePath` (required): PDF path, absolute or relative to the current directory
 - `firstPage` / `lastPage` (optional): 1-based page range
@@ -102,6 +104,33 @@ Example prompt:
 ```text
 Read from docs/some-pdf-file.pdf, pages 2-4, preserving layout.
 ```
+
+### copilot_quota
+
+`.opencode/config/tools/copilot_quota.ts` shows your GitHub Copilot plan, reset date, and used and remaining AI Credits, chat, and completions for the current billing period. It takes no arguments and reads the `github-copilot` token from `auth.json`, so sign in to GitHub Copilot first.
+
+### provider_status
+
+`.opencode/config/tools/provider_status.ts` checks the OpenAI-compatible providers (`"npm": "@ai-sdk/openai-compatible"`) in the global `opencode.jsonc`, for example a LiteLLM proxy. For each provider it reports:
+
+- **Budget:** spend, max budget, and reset date from LiteLLM's `/key/info`. Many proxies block this endpoint; the tool then reports it as not exposed.
+- **Models:** each model gets a 1-token request and shows as available, throttled (429), or error, with the upstream message. Rate-limit and `x-litellm-key-spend` headers are passed through.
+
+Arguments:
+
+- `provider` (optional): provider ID. Defaults to every OpenAI-compatible provider.
+- `models` (optional): model IDs to probe. Defaults to the provider's configured models.
+
+The tool authenticates with the provider's `options.apiKey` and `options.headers` and resolves `{env:VAR}` and `{file:path}` there, so keep the token out of the config. For example, set `"Authorization": "Bearer {env:OPEN_AI_TOKEN}"` in `opencode.jsonc.base`, put `OPEN_AI_TOKEN=...` in `.env`, and pass it in through `compose.override.yml`:
+
+```yaml
+services:
+  opencode:
+    environment:
+      OPEN_AI_TOKEN: ${OPEN_AI_TOKEN:?OPEN_AI_TOKEN is not set. Set it in .env}
+```
+
+Each run costs a few tokens per probed model. A 429 that mentions `Quota exceeded` or `RESOURCE_EXHAUSTED` usually comes from an upstream quota shared by all users of the proxy, not from your own key.
 
 ## Playwright MCP (browser plugin)
 

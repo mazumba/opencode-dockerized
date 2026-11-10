@@ -5,6 +5,9 @@ services:
       - /full/path/to/my/projects:/full/path/to/my/projects
 #     Mount your auth.json file here, if you have one:
       - ./.opencode/share/auth.json:/home/opencode/.local/share/opencode/auth.json
+#   Token for a custom OpenAI-compatible provider, if you set OPEN_AI_TOKEN in .env:
+#   environment:
+#     OPEN_AI_TOKEN: ${OPEN_AI_TOKEN:?OPEN_AI_TOKEN is not set. Set it in .env}
 
   # Only with the kanban plugin. Same real host path as opencode, mounted at the
   # same path: KANBAN_PROJECTS_ROOT points here, and lane stacks bind-mount from it.

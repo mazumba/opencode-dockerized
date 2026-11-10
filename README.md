@@ -483,6 +483,31 @@ If you are not using plugins, you can create `opencode.jsonc` directly:
 
 Both files are gitignored, so local customization does not affect others.
 
+### Custom providers
+
+To add an OpenAI-compatible provider, for example a LiteLLM proxy, keep its token out of `opencode.jsonc.base` and pass it in through the environment:
+
+1. Reference the variable in the provider block of `opencode.jsonc.base`:
+
+   ```jsonc
+   "provider": {
+     "my-proxy": {
+       "npm": "@ai-sdk/openai-compatible",
+       "options": {
+         "baseURL": "https://proxy.example.com/v1",
+         "headers": { "Authorization": "Bearer {env:OPEN_AI_TOKEN}" }
+       },
+       "models": { "some-model": {} }
+     }
+   }
+   ```
+
+2. Set `OPEN_AI_TOKEN=...` in `.env`.
+3. Uncomment the `environment` block in `compose.override.yml` (see `compose.override.yml.dist`).
+4. Run `make opencode-build-plugins` (or edit `opencode.jsonc` the same way if you don't use plugins), then `make opencode-run`.
+
+The token is in the container environment, so any agent with `bash` can read it, as with `LINEAR_API_KEY`. To check the provider's models and budget, use the [`provider_status`](docs/opencode-commands-skills-tools.md#provider_status) tool.
+
 ### oh-my-opencode-slim (`oh-my-opencode-slim.json`)
 
 The committed template is `.opencode/config/oh-my-opencode-slim.json.dist`. Copy it to get started:
@@ -544,7 +569,7 @@ so this setup does not provide meaningful isolation from the host.
 
 ## Further Reading
 
-This repo includes custom slash commands, a reusable skill system, and a PDF extraction tool.
+This repo includes custom slash commands, a reusable skill system, and custom tools (PDF extraction, Copilot quota, provider status).
 
 See [OpenCode commands, skills, and tools](docs/opencode-commands-skills-tools.md) for the full command catalog and skill/tool reference.
 
