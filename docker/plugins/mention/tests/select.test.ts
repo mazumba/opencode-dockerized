@@ -29,7 +29,7 @@ describe("cleanupDecision", () => {
 const config = { handle: "@example-bot", botLogin: "example-bot[bot]", allowedUsers: ["Alice"], lookbackMs: 3_600_000 };
 const comment = (over: Partial<Comment> = {}): Comment => ({
   id: 1, html_url: "https://github.com/org/repo/pull/12#issuecomment-1", issue_url: "https://api.github.com/repos/org/repo/issues/12",
-  body: `${config.handle} please help`, created_at: new Date(now).toISOString(), user: { login: "alice", type: "User" }, ...over,
+  body: `${config.handle} please help`, created_at: new Date(now).toISOString(), updated_at: over.created_at ?? new Date(now).toISOString(), user: { login: "alice", type: "User" }, ...over,
 });
 describe("mention matching", () => {
   const handle = config.handle;
@@ -43,6 +43,7 @@ describe("mention matching", () => {
 describe("candidate filtering", () => {
   for (const [label, value, expected] of [
     ["allowlist case insensitive", comment(), true],
+    ["edited comment", comment({ updated_at: new Date(now + 1).toISOString() }), false],
     ["not allowed", comment({ user: { login: "mallory", type: "User" } }), false],
     ["self bot", comment({ user: { login: config.botLogin.toUpperCase(), type: "User" } }), false],
     ["Bot type", comment({ user: { login: "alice", type: "Bot" } }), false],

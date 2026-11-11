@@ -99,11 +99,16 @@ describe("runAgent", () => {
     ).toEqual({ output: "a\nd", error: null });
   });
 
-  test("reports a model error from the final message", async () => {
+  test("reports only the model error name, not its message", async () => {
     const server = fake(() => json(assistant([], { name: "APIError", data: { message: "rate\nlimited" } })));
     const result = await runAgent(request(server));
-    expect(result.error).toBe("APIError: rate limited");
+    expect(result.error).toBe("APIError");
+    expect(describeRun(result)).toBe("agent error: APIError");
     expect(result.output).toBe("");
+  });
+
+  test("a model error without a name does not expose its message", () => {
+    expect(extractMessage(assistant([], { data: { message: "private detail" } }))).toEqual({ output: "", error: "error" });
   });
 
   test("an unexpected command response is an error", async () => {
@@ -345,7 +350,7 @@ describe("describeRun", () => {
   test("names the most specific cause", () => {
     expect(describeRun({ ...base, aborted: true })).toBe("poller stopped");
     expect(describeRun({ ...base, timedOut: true })).toBe("timeout after 2 min");
-    expect(describeRun({ ...base, error: "APIError: x" })).toBe("agent error: APIError: x");
+    expect(describeRun({ ...base, error: "APIError" })).toBe("agent error: APIError");
   });
 });
 

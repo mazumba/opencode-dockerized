@@ -160,7 +160,10 @@ export function createPoller(config: Config, gh = createGh(config.dryRun), git =
           if (await gh.hasEyes(repo, comment.id, config.botLogin)) continue;
           const roleKey = `${repo.toLowerCase()}:${comment.user.login.toLowerCase()}`;
           let role = roles.get(roleKey);
-          if (role === undefined) { role = await gh.role(repo, comment.user.login); roles.set(roleKey, role); }
+          if (role === undefined) {
+            try { role = await gh.role(repo, comment.user.login); roles.set(roleKey, role); }
+            catch (error) { log("candidate.role-error", { repo, comment: comment.id, reason: reasonOf(error) }); continue; }
+          }
           if (!roleAllowed(role, config.allowedRoles)) {
             log("candidate.rejected-role", { repo, comment: comment.id });
             continue;

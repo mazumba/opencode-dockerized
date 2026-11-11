@@ -16,6 +16,8 @@ A comment counts only if all of these hold:
 - Its author has a role in `MENTION_ALLOWED_ROLES` (default `admin,maintain`) on that repository. The poller asks `GET /repos/{owner}/{repo}/collaborators/{user}/permission`. It does not use the comment's `author_association`: in orgs that grant access through teams, that field says `CONTRIBUTOR` even for admins.
 - It is younger than `MENTION_LOOKBACK_HOURS` and has no 👀 from the bot yet.
 
+Edited comments are ignored because GitHub lets other writers edit a comment; post a new comment instead.
+
 Comments that fail the role check are logged and get no reaction. Keep the allowlist short: each user on it can make an unattended agent run on your machine (see [Security notes](#security-notes)).
 
 ## A run, step by step
