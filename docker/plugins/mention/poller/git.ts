@@ -1,6 +1,6 @@
 // Detached worktrees only. The main checkout's branch and working files are never changed.
 import { lstat, mkdir, readdir, readFile, realpath, writeFile } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, resolve, sep } from "node:path";
 import { exec as defaultExec, type Exec } from "./exec.ts";
 import { cleanupDecision, excludeAppend, REPO_PATTERN, validRef, type CleanupDecision, type CleanupFacts } from "./select.ts";
 
@@ -91,9 +91,24 @@ export function createGit(run: Exec = defaultExec, wait: Sleep = sleep) {
     return false;
   }
   /** Quits an interrupted rebase (HEAD stays), then drops uncommitted and untracked, non-ignored files. */
-  async function discardLeftovers(worktree: string): Promise<boolean> {
+  async function discardLeftovers(worktree: string, checkout: string, pr: number): Promise<boolean> {
     const rebasing = await rebaseInProgress(worktree);
-    if (rebasing) await git(worktree, ["rebase", "--quit"]);
+    if (rebasing) {
+      for (const name of ["rebase-merge", "rebase-apply"]) {
+        const path = resolve(worktree, await git(worktree, ["rev-parse", "--git-path", `${name}/orig-head`]));
+        let originalHead: string;
+        try { originalHead = (await readFile(path, "utf8")).trim(); }
+        catch (error) {
+          if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
+          throw error;
+        }
+        if (/^[0-9a-f]{40}$/i.test(originalHead)) {
+          await git(checkout, ["update-ref", `refs/mention/saved/pr-${pr}/${originalHead}`, originalHead]);
+        }
+        break;
+      }
+      await git(worktree, ["rebase", "--quit"]);
+    }
     const dirty = (await git(worktree, ["status", "--porcelain", "--untracked-files=all"])) !== "";
     if (dirty) {
       await git(worktree, ["reset", "--hard"]);
@@ -216,9 +231,12 @@ export function createGit(run: Exec = defaultExec, wait: Sleep = sleep) {
           const registered = (await git(checkout, ["worktree", "list", "--porcelain", "-z"]))
             .split("\0").some((entry) => entry === `worktree ${worktree}`);
           if (!registered) throw new GitError("worktree directory exists but is not registered");
+          if (await realpath(worktree) !== await git(worktree, ["rev-parse", "--show-toplevel"])) throw new GitError("worktree is not a standalone worktree root");
+          const gitDir = resolve(worktree, await git(worktree, ["rev-parse", "--git-dir"]));
+          if (!gitDir.startsWith(`${join(common, "worktrees")}${sep}`)) throw new GitError("worktree is not a standalone worktree root");
           // The worktree is poller-owned scratch space: leftovers of an earlier run must not block this one.
           // Commits stay recoverable (saved below); only uncommitted state is discarded.
-          discarded = await discardLeftovers(worktree);
+          discarded = await discardLeftovers(worktree, checkout, pr);
           const localHead = await git(worktree, ["rev-parse", "HEAD"]);
           // A previous unpushed agent commit must remain recoverable, even after another mention.
           if (localHead !== headSha) {

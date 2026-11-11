@@ -5,6 +5,7 @@ export interface Comment {
   issue_url: string;
   body: string;
   created_at: string;
+  updated_at: string;
   user: { login: string; type: string };
 }
 export interface Candidate {
@@ -34,6 +35,7 @@ export function isCandidate(comment: Comment, config: {
   const created = Date.parse(comment.created_at);
   const login = comment.user.login.toLowerCase();
   return prNumber(comment) !== null && mentions(comment.body, config.handle)
+    && comment.updated_at === comment.created_at
     && login !== config.botLogin.toLowerCase() && comment.user.type.toLowerCase() !== "bot"
     && config.allowedUsers.some((user) => user.toLowerCase() === login)
     && Number.isFinite(created) && created >= now - config.lookbackMs && created <= now;

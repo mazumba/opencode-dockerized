@@ -72,7 +72,7 @@ interface Extracted {
 
 /** Final text and error of an assistant message (`{info, parts}`). */
 export function extractMessage(message: unknown): Extracted {
-  const { info, parts } = (message ?? {}) as { info?: { error?: { name?: string; data?: { message?: string } } }; parts?: unknown };
+  const { info, parts } = (message ?? {}) as { info?: { error?: { name?: string } }; parts?: unknown };
   if (!info || !Array.isArray(parts)) return { output: "", error: "unexpected response" };
   const texts = parts
     .filter((p) => p?.type === "text" && !p.synthetic && !p.ignored && typeof p.text === "string")
@@ -80,7 +80,7 @@ export function extractMessage(message: unknown): Extracted {
   const failure = info.error;
   return {
     output: texts.join("\n"),
-    error: failure ? shorten(`${failure.name ?? "error"}: ${failure.data?.message ?? ""}`) : null,
+    error: failure ? shorten(failure.name ?? "error") : null,
   };
 }
 

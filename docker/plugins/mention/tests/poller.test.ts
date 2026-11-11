@@ -16,7 +16,7 @@ const now = Date.parse("2026-10-20T12:00:00Z");
 const trigger = (id: number, pr = 1) => ({
   id, html_url: `https://github.com/org/repo/pull/${pr}#issuecomment-${id}`,
   issue_url: `https://api.github.com/repos/org/repo/issues/${pr}`, body: "@helper help",
-  created_at: new Date(now - (10 - id) * 1_000).toISOString(), user: { login: "alice", type: "User" },
+  created_at: new Date(now - (10 - id) * 1_000).toISOString(), updated_at: new Date(now - (10 - id) * 1_000).toISOString(), user: { login: "alice", type: "User" },
 });
 const pull = { state: "open", merged: false, head: { ref: "feature", sha: "a".repeat(40), repo: { full_name: "org/repo" } }, base: { ref: "main" }, maintainer_can_modify: true };
 const result: RunResult = { sessionId: "s1", error: null, timedOut: false, aborted: false, stuck: false, output: 'MENTION-RESULT: {"outcome":"replied"}', durationMs: 1 };
@@ -96,6 +96,32 @@ describe("poller lifecycle", () => {
   });
   test("denied role stays unclaimed", async () => {
     const f = fixture({ role: "write" }); await f.poller.pass(now); await f.poller.drain(); expect(f.writes).toEqual([]);
+  });
+  test("edited comment stays unclaimed", async () => {
+    const f = fixture({ comments: [{ ...trigger(1), updated_at: new Date(now).toISOString() }] });
+    await f.poller.pass(now); await f.poller.drain(); expect(f.writes).toEqual([]); expect(f.events).toEqual([]);
+  });
+  test("role lookup failure skips only that comment, not later authors", async () => {
+    const f = fixture({ replied: true, comments: [trigger(1), { ...trigger(2, 2), user: { login: "bob", type: "User" } }] });
+    const roles = spyOn(f.gh, "role").mockRejectedValueOnce(new Error("private detail")).mockResolvedValue("admin");
+    const logs = spyOn(console, "log").mockImplementation(() => {});
+    const p = createPoller({ ...config, allowedUsers: ["alice", "bob"] }, f.gh, f.git, async () => { f.events.push("run"); return result; });
+    try {
+      await p.pass(now); await p.drain();
+      expect(roles.mock.calls).toEqual([["org/repo", "alice"], ["org/repo", "bob"]]);
+      expect(f.events).toEqual(["prepare", "claim", "run"]); expect(f.writes).toEqual(["eyes"]);
+      const lines = logs.mock.calls.map(([line]) => JSON.parse(line));
+      expect(lines).toContainEqual(expect.objectContaining({ event: "candidate.role-error", repo: "org/repo", comment: 1, reason: "internal error" }));
+      expect(lines).toContainEqual(expect.objectContaining({ event: "pass.done", candidates: 1, starts: 1 }));
+    } finally { roles.mockRestore(); logs.mockRestore(); }
+  });
+  test("failed role lookups are not cached for later comments", async () => {
+    const f = fixture({ replied: true, comments: [trigger(1), trigger(2, 2)] });
+    const roles = spyOn(f.gh, "role").mockRejectedValueOnce(new Error("private detail")).mockResolvedValue("admin");
+    try {
+      await f.poller.pass(now); await f.poller.drain();
+      expect(roles).toHaveBeenCalledTimes(2); expect(f.events).toContain("run"); expect(f.writes).toEqual(["eyes"]);
+    } finally { roles.mockRestore(); }
   });
   test("passes do not await jobs; one per PR; role cached per pass", async () => {
     const f = fixture({ comments: [trigger(2), trigger(1), trigger(3, 2), trigger(4, 3)] });

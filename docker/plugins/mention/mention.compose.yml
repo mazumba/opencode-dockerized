@@ -29,18 +29,18 @@ services:
     depends_on:
       - opencode
     volumes:
-      - '${GH_APP_PRIVATE_KEY_PATH:?GH_APP_PRIVATE_KEY_PATH is not set. Set it in .env (see README "Mention plugin")}:/run/secrets/github-app.pem:ro'
-      - '${MENTION_PROJECTS_ROOT:?MENTION_PROJECTS_ROOT is not set. Set it in .env (see README "Mention plugin")}:${MENTION_PROJECTS_ROOT}'
+      - '${GH_APP_PRIVATE_KEY_PATH:?GH_APP_PRIVATE_KEY_PATH is not set. Set it in .env (see docs/mention-plugin.md)}:/run/secrets/github-app.pem:ro'
+      - '${MENTION_PROJECTS_ROOT:?MENTION_PROJECTS_ROOT is not set. Set it in .env (see docs/mention-plugin.md)}:${MENTION_PROJECTS_ROOT}'
     environment:
-      GH_APP_ID: '${GH_APP_ID:?GH_APP_ID is not set. Set it in .env (see README "Mention plugin")}'
+      GH_APP_ID: '${GH_APP_ID:?GH_APP_ID is not set. Set it in .env (see docs/mention-plugin.md)}'
       GH_APP_INSTALLATION_ID: ${GH_APP_INSTALLATION_ID:-}
-      OPENCODE_SERVER_PASSWORD: '${OPENCODE_SERVER_PASSWORD:?OPENCODE_SERVER_PASSWORD is not set. Set it in .env (see README "Mention plugin")}'
+      OPENCODE_SERVER_PASSWORD: '${OPENCODE_SERVER_PASSWORD:?OPENCODE_SERVER_PASSWORD is not set. Set it in .env (see docs/mention-plugin.md)}'
       OPENCODE_SERVER_USERNAME: ${OPENCODE_SERVER_USERNAME:-opencode}
       MENTION_HANDLE: ${MENTION_HANDLE:-}
       MENTION_BOT_LOGIN: ${MENTION_BOT_LOGIN:-}
-      MENTION_ALLOWED_USERS: '${MENTION_ALLOWED_USERS:?MENTION_ALLOWED_USERS is not set. Set it in .env (see README "Mention plugin")}'
+      MENTION_ALLOWED_USERS: '${MENTION_ALLOWED_USERS:?MENTION_ALLOWED_USERS is not set. Set it in .env (see docs/mention-plugin.md)}'
       MENTION_ALLOWED_ROLES: ${MENTION_ALLOWED_ROLES:-admin,maintain}
-      MENTION_PROJECTS_ROOT: '${MENTION_PROJECTS_ROOT:?MENTION_PROJECTS_ROOT is not set. Set it in .env (see README "Mention plugin")}'
+      MENTION_PROJECTS_ROOT: '${MENTION_PROJECTS_ROOT:?MENTION_PROJECTS_ROOT is not set. Set it in .env (see docs/mention-plugin.md)}'
       MENTION_POLL_INTERVAL: ${MENTION_POLL_INTERVAL:-60}
       MENTION_LOOKBACK_HOURS: ${MENTION_LOOKBACK_HOURS:-24}
       MENTION_TIMEOUT: ${MENTION_TIMEOUT:-45}
