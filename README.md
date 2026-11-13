@@ -399,6 +399,34 @@ To require approval for additional tools:
 
 See the [permissions docs](https://opencode.ai/docs/permissions) for all options.
 
+## Corporate CA and private registry
+
+For package mirrors or registries signed by an internal CA, the container needs to trust that CA,
+and the host Docker daemon needs to trust it too.
+
+1. **Container trust.** Put the root CA as PEM files named `*.crt` in `docker/certs/` (gitignored, never committed),
+   then rebuild with `make opencode-build`. The Dockerfile adds them to the system trust store and sets
+   `NODE_EXTRA_CA_CERTS`, `SSL_CERT_FILE` and `REQUESTS_CA_BUNDLE`, so opencode, Bun, Node, Python
+   and the poller services (same image) all trust the CA. An empty folder changes nothing.
+
+2. **Host daemon trust.** The container's `docker` CLI uses the host daemon through the socket,
+   and the daemon checks the registry's certificate itself. Do this once on the host:
+
+   | Host                    | Step                                                                                             |
+   |-------------------------|--------------------------------------------------------------------------------------------------|
+   | Linux / WSL (Engine)    | `sudo install -D -m 0644 root-ca.crt /etc/docker/certs.d/<registry-host>:<port>/ca.crt` (no restart needed) |
+   | Docker Desktop (macOS)  | Add the CA to the login keychain as trusted, then restart Docker Desktop                          |
+   | Docker Desktop (Windows)| Import the CA into "Trusted Root Certification Authorities", then restart Docker Desktop          |
+
+3. **Registry login (optional).** Set `DOCKER_REGISTRY`, `DOCKER_REGISTRY_USER` and `DOCKER_REGISTRY_PASSWORD` in `.env`.
+   The entrypoint logs the `opencode` user in at startup and only warns on failure (e.g. off-VPN).
+   The password is removed from the opencode process environment, but it is stored in the container's
+   `~/.docker/config.json` and visible via `docker inspect`, so the agent can read it. Use a read-only account,
+   never push credentials.
+
+Check from inside the container: `curl https://<registry-host>:<port>/v2/` should answer `401` (not a TLS error)
+before login, and `docker pull <registry-host>:<port>/<image>` should work after it.
+
 ## Docker Socket Access
 
 The container mounts `/var/run/docker.sock` so opencode can run Docker commands on the host.

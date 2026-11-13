@@ -18,6 +18,15 @@ RUN apt-get update && apt-get install -y \
 
 RUN rm -rf /var/lib/apt/lists/*
 
+# Extra CA certificates (e.g. a corporate root CA): PEM files named *.crt in
+# docker/certs/ (gitignored). Trusted before any later download step. Node/Bun
+# and Python HTTP clients ignore the system store by default, hence the ENVs.
+COPY certs/ /usr/local/share/ca-certificates/extra/
+RUN update-ca-certificates
+ENV NODE_EXTRA_CA_CERTS=/etc/ssl/certs/ca-certificates.crt \
+    SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt \
+    REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
+
 # Install Docker CLI only (no daemon)
 RUN mkdir -p /etc/apt/keyrings \
     && curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc \
@@ -56,6 +65,9 @@ USER root
 
 USER opencode
 RUN curl -fsSL https://bun.sh/install | bash
+# The installer only edits shell rc files; put bun on PATH for later RUN steps.
+# Appended, so a system-wide bun from a plugin (e.g. browser) keeps precedence.
+ENV PATH=$PATH:/home/opencode/.bun/bin
 RUN if [ -n "${OH_MY_OPENCODE_SLIM_VERSION}" ]; then \
         bun x oh-my-opencode-slim@${OH_MY_OPENCODE_SLIM_VERSION} install; \
     else \

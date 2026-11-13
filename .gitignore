@@ -20,6 +20,9 @@
 .opencode/share/*
 !.opencode/share/.gitkeep
 
+docker/certs/*
+!docker/certs/.gitkeep
+
 package-lock.json
 
 compose.override.yml

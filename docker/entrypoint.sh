@@ -15,6 +15,26 @@ if [ -S /var/run/docker.sock ]; then
     usermod -aG "${SOCK_GID}" opencode
 fi
 
+# Log the opencode user in to a private Docker registry. The login goes through
+# the host daemon, so the host daemon must trust the registry's CA itself (see
+# README "Corporate CA and private registry"). A failed login only warns: the
+# registry may be unreachable off-VPN, and opencode is still usable without it.
+if [ -n "${DOCKER_REGISTRY:-}" ]; then
+    if [ -z "${DOCKER_REGISTRY_USER:-}" ] || [ -z "${DOCKER_REGISTRY_PASSWORD:-}" ]; then
+        echo "entrypoint: DOCKER_REGISTRY is set but DOCKER_REGISTRY_USER or DOCKER_REGISTRY_PASSWORD is empty" >&2
+        exit 1
+    fi
+    if printf '%s' "$DOCKER_REGISTRY_PASSWORD" \
+        | gosu opencode docker login "$DOCKER_REGISTRY" --username "$DOCKER_REGISTRY_USER" --password-stdin > /dev/null; then
+        echo "entrypoint: logged in to $DOCKER_REGISTRY"
+    else
+        echo "entrypoint: WARNING: docker login to $DOCKER_REGISTRY failed; image pulls from it will fail" >&2
+    fi
+fi
+# Keep the password out of the opencode process environment. It still ends up
+# in ~/.docker/config.json, readable by the agent: use a read-only account.
+unset DOCKER_REGISTRY_PASSWORD
+
 # Run plugin-provided startup hooks, if any, as root, in lexical order.
 # Hooks are optional POSIX shell scripts installed at build time by
 # docker/build-plugins.sh under /usr/local/lib/opencode/entrypoint.d/ (see
