@@ -6,7 +6,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     fluidsynth \
     libfluidsynth-dev \
     timidity \
-    libasound2 \
+    libasound2t64 \
     libsndfile1 \
     python3-pip
 
@@ -17,8 +17,7 @@ RUN sed -i 's|^source /etc/timidity/fluidr3_gm.cfg$|source /etc/timidity/timgm6m
     grep -qx 'source /etc/timidity/timgm6mb.cfg' /etc/timidity/timidity.cfg
 
 # Python MIDI/music stack
-RUN python3 -m pip install --break-system-packages --upgrade pip setuptools wheel && \
-    python3 -m pip install --break-system-packages \
+RUN python3 -m pip install --break-system-packages \
       mido \
       pretty_midi \
       miditoolkit \

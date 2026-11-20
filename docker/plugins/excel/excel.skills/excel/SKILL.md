@@ -3,7 +3,7 @@ name: excel
 description: Excel workbooks with openpyxl. Use when reading, creating, or editing .xlsx/.xlsm files, extracting spreadsheet data, or writing formulas, formatting, and charts.
 ---
 
-The container has `openpyxl` 3.0.9 from Debian (`import openpyxl`). There is no LibreOffice, no `xlrd` and no Excel, so nothing can recalculate formulas or open legacy files.
+The container has `openpyxl` 3.1.5 from Debian (`import openpyxl`). There is no LibreOffice, no `xlrd` and no Excel, so nothing can recalculate formulas or open legacy files.
 
 ## Formulas
 
