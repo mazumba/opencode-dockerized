@@ -73,13 +73,16 @@
 #
 # Available package managers:
 #
-#   apt-get  — system/native packages (Debian bookworm)
+#   apt-get  — system/native packages (Debian trixie)
 #              Use --no-install-recommends to keep the layer lean.
 #
 #   pip      — Python packages, for when no apt package exists
 #              Install python3-pip via apt first.
-#              Always pass --break-system-packages (required on Debian bookworm).
-#              Upgrade pip/setuptools/wheel first if packages require a build step.
+#              Always pass --break-system-packages (required on Debian trixie).
+#              Do not upgrade pip/setuptools/wheel: Debian installs them without
+#              a RECORD file, so pip cannot replace them and the build fails.
+#              Packages that need a build step get their own setuptools/wheel
+#              in pip's isolated build environment.
 #
 # ─── System packages ───────────────────────────────
 

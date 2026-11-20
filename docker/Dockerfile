@@ -1,27 +1,30 @@
-FROM debian:12.14-slim
+FROM debian:13.7-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2
 
 ARG USER_UID=1000
 ARG USER_GID=1000
 ARG OPENCODE_VERSION=
 ARG OH_MY_OPENCODE_SLIM_VERSION=
 
-RUN apt-get update && apt-get install -y \
-    curl \
-    ca-certificates \
-    git \
-    gosu \
-    make \
-    python3 \
-    poppler-utils \
-    ripgrep \
-    unzip
-
-RUN rm -rf /var/lib/apt/lists/*
+# Upgrade packages that ship with the base image, so security fixes released
+# after the pinned digest are included in every build.
+RUN apt-get update \
+    && apt-get upgrade -y \
+    && apt-get install -y \
+        curl \
+        ca-certificates \
+        git \
+        gosu \
+        make \
+        python3 \
+        poppler-utils \
+        ripgrep \
+        unzip \
+    && rm -rf /var/lib/apt/lists/*
 
 # Install Docker CLI only (no daemon)
 RUN mkdir -p /etc/apt/keyrings \
     && curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc \
-    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian bookworm stable" \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian trixie stable" \
         > /etc/apt/sources.list.d/docker.list \
     && apt-get update \
     && apt-get install -y docker-ce-cli \

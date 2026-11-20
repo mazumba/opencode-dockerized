@@ -3,7 +3,7 @@ name: image
 description: Raster image processing with libvips. Use when converting images to AVIF/WebP/JPEG, resizing or cropping, generating thumbnails, or batch-optimising images for the web.
 ---
 
-The container has the libvips CLI (`vips`, `vipsthumbnail`, `vipsheader`), version 8.14. There is no ImageMagick and no `pyvips`. Use the CLI.
+The container has the libvips CLI (`vips`, `vipsthumbnail`, `vipsheader`), version 8.16. There is no ImageMagick and no `pyvips`. Use the CLI.
 
 ## Options and formats
 

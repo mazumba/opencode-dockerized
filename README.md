@@ -567,6 +567,12 @@ so this setup does not provide meaningful isolation from the host.
 | macOS (Docker Desktop) | `0` (`root`)       |
 | Linux (Docker Engine)  | `999` or varies    |
 
+## Base Image Updates
+
+`docker/Dockerfile` pins the Debian base image by tag and digest (`debian:13.x-slim@sha256:…`). Every build also runs `apt-get upgrade`, so security fixes published after the pinned digest are still installed.
+
+[Renovate](https://docs.renovatebot.com/) (`renovate.json`) opens PRs for new digests and new `13.x-slim` point releases. It does not propose a new Debian major release: that upgrade also needs the `trixie` apt source in `docker/Dockerfile` and the plugin package names to change, so do it by hand.
+
 ## Further Reading
 
 This repo includes custom slash commands, a reusable skill system, and custom tools (PDF extraction, Copilot quota, provider status).
