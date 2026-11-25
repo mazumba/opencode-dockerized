@@ -3,7 +3,6 @@ export interface Config {
   team: string;
   pollIntervalMs: number;
   opencodeUrl: string;
-  opencodeUsername: string;
   opencodePassword: string;
   maxAutomated: number;
   /** Parent of the default checkouts (`<root>/<repo name>`); null when projects must give a `path:`. */
@@ -60,7 +59,6 @@ export function loadConfig(env: Record<string, string | undefined>, argv: string
     team: env.KANBAN_TEAM || "DEY",
     pollIntervalMs: positiveNumber(env, "KANBAN_POLL_INTERVAL", 60) * SECOND,
     opencodeUrl: env.KANBAN_OPENCODE_URL || "http://opencode:4096",
-    opencodeUsername: env.OPENCODE_SERVER_USERNAME || "opencode",
     opencodePassword: env.OPENCODE_SERVER_PASSWORD as string,
     projectsRoot: projectsRoot(env),
     maxAutomated: positiveInteger(env, "KANBAN_MAX_AUTOMATED", DEFAULT_MAX_AUTOMATED),

@@ -2,6 +2,8 @@ FROM debian:13.7-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070
 
 ARG USER_UID=1000
 ARG USER_GID=1000
+# Pinned in compose.yml (override in .env). OpenCode 2 ships on npm as @opencode/cli; GitHub's
+# "latest" release is still the 1.x line. oh-my-opencode-slim 3 requires OpenCode >= 2.3.0.
 ARG OPENCODE_VERSION=
 ARG OH_MY_OPENCODE_SLIM_VERSION=
 
@@ -46,36 +48,28 @@ RUN if ! getent group ${USER_GID} > /dev/null 2>&1; then \
     && useradd -m -u ${USER_UID} -g ${USER_GID} -s /bin/bash opencode
 
 USER opencode
-# Resolve "latest" ourselves via the github.com release redirect: the
-# installer's own lookup uses the GitHub API, which is rate-limited to 60
-# anonymous requests per hour per IP and then fails with a vague error.
 RUN set -eu; \
-    version="${OPENCODE_VERSION}"; \
-    if [ -z "$version" ]; then \
-        version=$(curl -fsSI -o /dev/null -w '%{redirect_url}' \
-            https://github.com/anomalyco/opencode/releases/latest | sed -n 's#.*/tag/v##p'); \
-        [ -n "$version" ] || { echo "could not resolve latest opencode version; set OPENCODE_VERSION in .env" >&2; exit 1; }; \
-    fi; \
-    echo "installing opencode $version"; \
-    curl -fsSL https://opencode.ai/install | bash -s -- --version "$version" --no-modify-path \
+    [ -n "${OPENCODE_VERSION}" ] || { echo "OPENCODE_VERSION must not be empty" >&2; exit 1; }; \
+    echo "installing opencode ${OPENCODE_VERSION}"; \
+    curl -fsSL https://opencode.ai/v2/install | bash -s -- --version "${OPENCODE_VERSION}" --no-modify-path \
     && mkdir -p /home/opencode/.local/state/opencode \
     && mkdir -p /home/opencode/.local/share/opencode \
     && mkdir -p /home/opencode/.config/opencode
+
+RUN curl -fsSL https://bun.sh/install | bash
+# The installers only edit shell rc files; put opencode and bun on PATH for later RUN steps.
+# Appended, so a system-wide bun from a plugin (e.g. browser) keeps precedence.
+ENV PATH=$PATH:/home/opencode/.opencode/bin:/home/opencode/.bun/bin
 
 USER root
 # injection marker for plugin system dependencies (apt or pip). See docker/plugins/plugin.dockerfile.dist for details.
 # {{plugins}}
 
 USER opencode
-RUN curl -fsSL https://bun.sh/install | bash
-# The installer only edits shell rc files; put bun on PATH for later RUN steps.
-# Appended, so a system-wide bun from a plugin (e.g. browser) keeps precedence.
-ENV PATH=$PATH:/home/opencode/.bun/bin
-RUN if [ -n "${OH_MY_OPENCODE_SLIM_VERSION}" ]; then \
-        bun x oh-my-opencode-slim@${OH_MY_OPENCODE_SLIM_VERSION} install; \
-    else \
-        bun x oh-my-opencode-slim@latest install; \
-    fi
+# --no-tui: non-interactive installer. It checks `opencode --version`, so OpenCode must be installed first.
+RUN set -eu; \
+    [ -n "${OH_MY_OPENCODE_SLIM_VERSION}" ] || { echo "OH_MY_OPENCODE_SLIM_VERSION must not be empty" >&2; exit 1; }; \
+    bun x oh-my-opencode-slim@${OH_MY_OPENCODE_SLIM_VERSION} install --no-tui
 
 USER root
 # Directory for plugin-provided startup hooks. Always created so entrypoint.sh
@@ -89,4 +83,5 @@ COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
-CMD ["/home/opencode/.opencode/bin/opencode", "web", "--hostname", "0.0.0.0"]
+# `serve` runs the API and the web UI in the foreground. V2 defaults to port 49374, so pin 4096.
+CMD ["/home/opencode/.opencode/bin/opencode", "serve", "--hostname", "0.0.0.0", "--port", "4096"]

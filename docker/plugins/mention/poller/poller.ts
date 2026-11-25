@@ -14,7 +14,6 @@ function reasonOf(error: unknown): string {
 export function createPoller(config: Config, gh = createGh(config.dryRun), git = createGit(), run = runAgent) {
   const live = new Map<string, { controller: AbortController; promise: Promise<void> }>();
   let stopping = false;
-  let questionWarningLogged = false;
   const cleanupSkips = new Map<string, string>();
   const shutdown = new AbortController();
 
@@ -101,17 +100,11 @@ export function createPoller(config: Config, gh = createGh(config.dryRun), git =
       };
       agentStarted = true;
       const result = await run({
-        url: config.opencodeUrl, username: config.username, password: config.password,
+        url: config.opencodeUrl, password: config.password,
         agent: "orchestrator", command: "reply-mention", message: `ctx:${JSON.stringify(context)}`,
         dir: worktree, title: `mention ${repo}#${pr}`, timeoutMs: config.timeoutMs, signal: controller.signal,
         onSession: (session) => log("run.session", { repo, pr, session }),
-        onEvent: (event) => {
-          if (event === "question-unavailable") {
-            if (questionWarningLogged) return;
-            questionWarningLogged = true;
-          }
-          log(`run.${event}`, { repo, pr });
-        },
+        onEvent: (event) => log(`run.${event}`, { repo, pr }),
       });
       keepLocked = result.stuck;
       const parsed = parseResult(result.output);

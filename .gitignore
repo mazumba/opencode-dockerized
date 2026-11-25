@@ -13,7 +13,7 @@
 !.opencode/config/skills
 .opencode/config/skills/plugins/
 !.opencode/config/skills-lock.json
-!.opencode/config/tools
+!.opencode/config/plugins
 !.opencode/config/opencode.jsonc.base.dist
 !.opencode/config/oh-my-opencode-slim.json.dist
 
@@ -24,6 +24,7 @@ docker/certs/*
 !docker/certs/.gitkeep
 
 package-lock.json
+node_modules/
 
 compose.override.yml
 

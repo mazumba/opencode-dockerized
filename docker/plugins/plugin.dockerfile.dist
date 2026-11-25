@@ -8,7 +8,8 @@
 #
 #   <name>.package.json      — npm dependencies to merge (optional)
 #                              Merged into .opencode/config/package.json by build-plugins.sh.
-#                              OpenCode runs `bun install` automatically at startup.
+#                              OpenCode 2 does not install these automatically: run
+#                              `bun install` in .opencode/config (or use `bun x <pkg>`).
 #
 #   <name>.opencode.jsonc    — MCP config fragment (optional)
 #                              Injected into .opencode/config/opencode.jsonc at the

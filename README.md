@@ -71,11 +71,16 @@ The port is published on `127.0.0.1` only, so other machines on your network can
 
 The container runs as a non-root user matching your host `UID`/`GID` (detected automatically by the `Makefile`).
 
-To pin a specific OpenCode version, set `OPENCODE_VERSION` in `.env`:
+The image installs OpenCode 2.4.1 and oh-my-opencode-slim 3.0.8 (pinned in `compose.yml`). To use other versions, set them in `.env`:
 
 ```sh
-OPENCODE_VERSION=1.19.4
+OPENCODE_VERSION=2.4.1
+OH_MY_OPENCODE_SLIM_VERSION=3.0.8
 ```
+
+OpenCode must be 2.x: it ships on npm as `@opencode/cli`, while GitHub's latest release is still the 1.x line. Slim 3 needs OpenCode 2.3.0 or newer.
+
+`OH_MY_OPENCODE_SLIM_VERSION` only pins the installer. OpenCode loads the plugin version named in the `plugin` entry of `opencode.jsonc.base` (`oh-my-opencode-slim@3.0.8`), so change both together.
 
 ## Plugins
 
@@ -109,7 +114,7 @@ make opencode-build-plugins
 
 ### Browser MCP (Playwright)
 
-The `browser` plugin adds [`@playwright/mcp@0.0.72`](https://github.com/microsoft/playwright-mcp) — a local MCP server that lets the `browse` agent control a headless Chromium browser.
+The `browser` plugin adds [`@playwright/mcp`](https://github.com/microsoft/playwright-mcp) (version pinned in `docker/plugins/browser/`) — a local MCP server that lets the `browse` agent control a headless Chromium browser.
 
 **Opt-in:**
 
@@ -285,19 +290,55 @@ The template documents the available package managers (`apt-get`, `pip`) and the
 
 Document the plugin in a `### <Name> plugin` section under [Plugins](#plugins) and add it to the plugin table. Once that section passes about 60 lines, or the plugin runs its own service (like the kanban and mention pollers), move the details to `docs/<name>-plugin.md` and keep a short summary with a link in the README.
 
-## Authentication (`auth.json`)
+## Authentication
 
-If you already use opencode locally, you can reuse existing credentials and skip signing in again:
+OpenCode 2 keeps provider credentials in its SQLite database (`opencode.db`, table `credential`) in the `opencode_share` volume. Sign in from the web UI (`/connect`), or from a terminal in the container:
 
 ```sh
-# macOS / Linux
-cp ~/.local/share/opencode/auth.json .opencode/share/auth.json
+docker exec -it opencode /home/opencode/.opencode/bin/opencode auth login github-copilot
+docker exec -it opencode /home/opencode/.opencode/bin/opencode auth list
 ```
 
-Otherwise, run `make opencode-run`, open `http://localhost:4096`, and authenticate in the UI.
-Credentials are written automatically to `.opencode/share/auth.json`.
+To reuse credentials from another OpenCode 2 install, run `opencode auth export > keys.json` there and `docker exec -i opencode /home/opencode/.opencode/bin/opencode auth import < keys.json` here. The file holds your tokens in plain text, so delete it afterwards.
 
-> **Note:** `auth.json` may contain provider tokens. It is covered by `.gitignore` and is not committed.
+### Importing an OpenCode 1 `auth.json`
+
+`opencode auth import` does not read the V1 `auth.json` format. OpenCode 2 imports that file only once, during the database migration on its first start with a volume, and skips providers that already have a credential. To use it:
+
+1. Before the first start, uncomment the `auth.json` line in `compose.override.yml` (see `compose.override.yml.dist`) and copy the file to `.opencode/share/auth.json`:
+
+   ```sh
+   cp ~/.local/share/opencode/auth.json .opencode/share/auth.json
+   ```
+
+2. Run `make opencode-run`, then check that your providers are listed with `opencode auth list` (command above).
+3. Remove the mount and delete `.opencode/share/auth.json`. Later edits to the file have no effect.
+
+A volume that has already started under OpenCode 2 never reads `auth.json` again. Sign in with `/connect` instead, or start from a fresh volume.
+
+## Upgrading from OpenCode 1
+
+On first start, OpenCode 2 migrates the database in the `opencode_share` volume. This migration cannot be undone, so back up the volume first:
+
+```sh
+docker run --rm -v opencode-dockerized_opencode_share:/data -v "$PWD":/backup alpine:3 \
+  tar czf /backup/opencode_share-v1.tgz -C /data .
+```
+
+The migration also imports the credentials from an `auth.json` in the data directory, once. Keep your old `auth.json` mount in `compose.override.yml` for that first start, then remove it (see [Importing an OpenCode 1 `auth.json`](#importing-an-opencode-1-authjson)).
+
+Other changes in OpenCode 2 that affect this setup:
+
+- The container runs `opencode serve` instead of `opencode web`. It serves the web UI and the API on port 4096, and the username is always `opencode`.
+- The pollers use the V2 API (`/api/...`). `OPENCODE_SERVER_USERNAME` is gone.
+- Custom tools moved from `.opencode/config/tools/` into a plugin, `.opencode/config/plugins/custom-tools/`.
+- `tui.json` is replaced by `cli.json`. This repo no longer ships one: Slim's TUI part loads with its server plugin.
+- `lsp` is accepted but does nothing: OpenCode 2 runs no language servers.
+- Todos are off by default in V2. Set `"experimental": {"todo": true}` in `opencode.jsonc.base` to turn them back on.
+- V2 lets agents read paths outside the project by default; the config sets `external_directory` to `ask`.
+- Slim 3 merged the `librarian` agent into `explorer`, and its bundled skills (`clonedeps`, `deepwork`, `worktrees`, and more) load from the package instead of `.opencode/config/skills/`.
+
+See the [OpenCode migration guide](https://opencode.ai/docs/migrate-v1/) and [Slim's upgrade notes](https://github.com/alvinunreal/oh-my-opencode-slim/blob/master/docs/installation.md#upgrading).
 
 ## Configuration (`opencode.jsonc`)
 

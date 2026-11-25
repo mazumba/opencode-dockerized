@@ -1,0 +1,2 @@
+# Host-side installs of the poller dependencies; the image installs its own from bun.lock.
+**/node_modules

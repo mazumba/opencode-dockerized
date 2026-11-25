@@ -3,7 +3,9 @@
   "autoupdate": false,
   "share": "disabled",
   "permission": {
-    "bash": "ask"
+    "bash": "ask",
+    // V2 allows paths outside the project by default; ask instead.
+    "external_directory": "ask"
     // Plugin-owned MCP tools are denied for all agents here except the
     // plugin's own agent; keep this last — permission rules are last-match-wins.
     // {{permission-plugins}}
@@ -36,8 +38,9 @@
     // injection marker for MCP plugin configuration fragments; see docker/plugins/plugin.dockerfile.dist for details
     // {{mcp-plugins}}
   },
+  // Pinned: an unpinned entry makes OpenCode fetch the latest Slim at startup. Keep in sync with
+  // OH_MY_OPENCODE_SLIM_VERSION (compose.yml), which only pins the build-time installer.
   "plugin": [
-    "oh-my-opencode-slim"
-  ],
-  "lsp": true
+    "oh-my-opencode-slim@3.0.8"
+  ]
 }

@@ -89,11 +89,13 @@ Restart opencode afterwards so it loads the new skill.
 
 ## Custom tools
 
+OpenCode 2 only loads tools that a plugin registers. The plugin `.opencode/config/plugins/custom-tools/` registers the three tools below, one module each (`pdftotext.ts`, `copilot-quota.ts`, `provider-status.ts`). OpenCode discovers it on startup, so it needs no config entry. Restart the container after editing it.
+
 ### pdftotext
 
-The custom tool `.opencode/config/tools/pdftotext.ts` exposes `pdftotext` with these arguments:
+`pdftotext` takes these arguments:
 
-- `filePath` (required): PDF path, absolute or relative to the current directory
+- `filePath` (required): PDF path, absolute or relative to the session's project directory
 - `firstPage` / `lastPage` (optional): 1-based page range
 - `preserveLayout` (optional): uses `pdftotext -layout`
 - `rawOrder` (optional): uses `pdftotext -raw`
@@ -107,11 +109,11 @@ Read from docs/some-pdf-file.pdf, pages 2-4, preserving layout.
 
 ### copilot_quota
 
-`.opencode/config/tools/copilot_quota.ts` shows your GitHub Copilot plan, reset date, and used and remaining AI Credits, chat, and completions for the current billing period. It takes no arguments and reads the `github-copilot` token from `auth.json`, so sign in to GitHub Copilot first.
+`copilot_quota` shows your GitHub Copilot plan, reset date, and used and remaining AI Credits, chat, and completions for the current billing period. It takes no arguments. It reads the token of the active `github-copilot` login from OpenCode's credential store, so sign in to GitHub Copilot first.
 
 ### provider_status
 
-`.opencode/config/tools/provider_status.ts` checks the OpenAI-compatible providers (`"npm": "@ai-sdk/openai-compatible"`) in the global `opencode.jsonc`, for example a LiteLLM proxy. For each provider it reports:
+`provider_status` checks the OpenAI-compatible providers (`"npm": "@ai-sdk/openai-compatible"`) in the global `opencode.jsonc`, for example a LiteLLM proxy. For each provider it reports:
 
 - **Budget:** spend, max budget, and reset date from LiteLLM's `/key/info`. Many proxies block this endpoint; the tool then reports it as not exposed.
 - **Models:** each model gets a 1-token request and shows as available, throttled (429), or error, with the upstream message. Rate-limit and `x-litellm-key-spend` headers are passed through.
@@ -121,7 +123,7 @@ Arguments:
 - `provider` (optional): provider ID. Defaults to every OpenAI-compatible provider.
 - `models` (optional): model IDs to probe. Defaults to the provider's configured models.
 
-The tool authenticates with the provider's `options.apiKey` and `options.headers` and resolves `{env:VAR}` and `{file:path}` there, so keep the token out of the config. For example, set `"Authorization": "Bearer {env:OPEN_AI_TOKEN}"` in `opencode.jsonc.base`, put `OPEN_AI_TOKEN=...` in `.env`, and pass it in through `compose.override.yml`:
+It reads the V1-shaped `provider` entries (with `npm` and `options`), which OpenCode 2 still accepts; providers written in the native V2 `providers` shape are not checked. The tool authenticates with the provider's `options.apiKey` and `options.headers` and resolves `{env:VAR}` and `{file:path}` there, so keep the token out of the config. For example, set `"Authorization": "Bearer {env:OPEN_AI_TOKEN}"` in `opencode.jsonc.base`, put `OPEN_AI_TOKEN=...` in `.env`, and pass it in through `compose.override.yml`:
 
 ```yaml
 services:
@@ -134,7 +136,7 @@ Each run costs a few tokens per probed model. A 429 that mentions `Quota exceede
 
 ## Playwright MCP (browser plugin)
 
-The `browser` plugin provides [`@playwright/mcp@0.0.72`](https://github.com/microsoft/playwright-mcp) — a local MCP server for headless Chromium automation.
+The `browser` plugin provides [`@playwright/mcp`](https://github.com/microsoft/playwright-mcp) (version pinned in `docker/plugins/browser/`) — a local MCP server for headless Chromium automation.
 
 **How it works:**
 

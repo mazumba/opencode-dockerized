@@ -344,7 +344,6 @@ async function run(
   }
   const result = await runAgent({
     url: ctx.config.opencodeUrl,
-    username: ctx.config.opencodeUsername,
     password: ctx.config.opencodePassword,
     agent,
     command,

@@ -27,21 +27,14 @@
         ],
         "mcps": []
       },
-      "librarian": {
-        "model": "github-copilot/gpt-6-luna",
-        "variant": "medium",
-        "skills": [],
-        "mcps": [
-          "websearch",
-          "context7",
-          "gh_grep"
-        ]
-      },
       "explorer": {
         "model": "github-copilot/gpt-6-luna",
         "variant": "medium",
         "skills": [],
-        "mcps": []
+        "mcps": [
+          "context7",
+          "gh_grep"
+        ]
       },
       "designer": {
         "model": "github-copilot/gpt-6.1-sol",

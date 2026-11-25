@@ -4,46 +4,69 @@ import { describeRun, extractMessage, runAgent, type RunRequest } from "../polle
 interface Call {
   method: string;
   path: string;
-  directory: string | null;
+  query: URLSearchParams;
   authorization: string | null;
   body: unknown;
 }
 
 const json = (value: unknown, status = 200) =>
   new Response(JSON.stringify(value), { status, headers: { "Content-Type": "application/json" } });
+const noContent = () => new Response(null, { status: 204 });
+const unexpected = (status: number) => json({ name: status === 401 ? "NotAuthorized" : "ApiError" }, status);
 
-const assistant = (parts: unknown[], error?: unknown) => ({
-  info: { id: "msg1", sessionID: "ses1", role: "assistant", ...(error ? { error } : {}) },
-  parts,
+const assistant = (content: unknown[], error?: unknown) => ({
+  id: "msg1",
+  type: "assistant",
+  agent: "orchestrator",
+  content,
+  ...(error ? { error } : {}),
 });
-const text = (value: string, extra: object = {}) => ({ type: "text", text: value, ...extra });
+const idle = (outcome: "succeeded" | "failed" | "interrupted" = "succeeded") => ({ id: "msg2", type: "idle", outcome, time: { created: 1 } });
+const text = (value: string) => ({ type: "text", text: value });
+const page = (data: unknown[]) => json({ data, cursor: {} });
 
-type Handler = (call: Call, signal: AbortSignal | undefined) => Response | Promise<Response>;
+type Override = (call: Call, signal: AbortSignal | undefined) => Response | Promise<Response> | undefined;
 
-/** Fake opencode server: records calls, routes through `handler`, defaults to a plain session create. */
-function fake(handler: Handler, questions = false) {
+const hangUntilAborted = (_call: Call, signal: AbortSignal | undefined) =>
+  new Promise<Response>((_resolve, reject) => {
+    signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
+  });
+
+/** Answers the default routes of a run that completes at once; `override` runs first and returns undefined to fall through. */
+function defaults(call: Call): Response {
+  if (call.path === "/api/session/active") return json({ data: {} });
+  if (call.path === "/api/session" && call.query.get("parentID")) return page([]);
+  if (call.path === "/api/permission/request") return json({ location: { directory: "/repo" }, data: [] });
+  if (call.path === "/api/form") return json({ location: { directory: "/repo" }, data: [] });
+  if (call.path === "/api/session/ses1/message" && call.query.get("type") === "assistant") {
+    return page([assistant([text("done"), text("MENTION-RESULT: {}")])]);
+  }
+  if (call.path === "/api/session/ses1/message" && call.query.get("type") === "idle") return page([idle()]);
+  if (call.path === "/api/session/ses1/interrupt") return json({ interrupted: true });
+  return noContent();
+}
+
+/** Fake OpenCode V2 server: records calls, answers session creation, then `override`, then the defaults. */
+function fake(override: Override = () => undefined) {
   const calls: Call[] = [];
   const impl = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
     const url = new URL(String(input));
     const call: Call = {
       method: init?.method ?? "GET",
       path: url.pathname,
-      directory: url.searchParams.get("directory"),
+      query: url.searchParams,
       authorization: new Headers(init?.headers).get("Authorization"),
       body: init?.body ? JSON.parse(String(init.body)) : undefined,
     };
     calls.push(call);
-    if (call.method === "POST" && call.path === "/session") return json({ id: "ses1" });
-    // Legacy permission-only fixtures have no question route; opt in below for question tests.
-    if (call.path === "/question" && !questions) return json([]);
-    return handler(call, init?.signal ?? undefined);
+    if (call.method === "POST" && call.path === "/api/session") return json({ data: { id: "ses1" } });
+    return (await override(call, init?.signal ?? undefined)) ?? defaults(call);
   };
   return { calls, fetch: impl as unknown as typeof fetch };
 }
 
 const request = (server: ReturnType<typeof fake>, over: Partial<RunRequest> = {}): RunRequest => ({
   url: "http://oc:4096/",
-  username: "opencode",
   password: "secret",
   agent: "orchestrator",
   command: "reply-mention",
@@ -56,166 +79,147 @@ const request = (server: ReturnType<typeof fake>, over: Partial<RunRequest> = {}
   ...over,
 });
 
-const hangUntilAborted: Handler = (_call, signal) =>
-  new Promise((_resolve, reject) => {
-    signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
-  });
-
 describe("runAgent", () => {
-  test("creates a session, sends the command, and returns the final text", async () => {
-    const server = fake((call) => {
-      if (call.path === "/session/ses1/command") return json(assistant([text("done"), text("MENTION-RESULT: {}")]));
-      return json([]);
-    });
+  test("creates a session in the project, submits the command, and returns the final text", async () => {
+    const server = fake();
     const seen: string[] = [];
     const result = await runAgent(request(server, { onSession: (id) => seen.push(id) }));
 
     expect(result).toMatchObject({ sessionId: "ses1", error: null, timedOut: false, aborted: false });
     expect(result.output).toBe("done\nMENTION-RESULT: {}");
     expect(seen).toEqual(["ses1"]);
-    const [create, command] = server.calls;
-    expect(create).toMatchObject({ method: "POST", path: "/session", body: { title: "mention org/repo#1" } });
-    expect(command).toMatchObject({
+    expect(server.calls[0]).toMatchObject({
       method: "POST",
-      path: "/session/ses1/command",
-      body: { command: "reply-mention", arguments: 'ctx:{"a":1}', agent: "orchestrator" },
+      path: "/api/session",
+      body: { title: "mention org/repo#1", agent: "orchestrator", location: { directory: "/repo" } },
+    });
+    expect(server.calls.find((c) => c.path === "/api/session/ses1/command")).toMatchObject({
+      method: "POST",
+      body: { name: "reply-mention", text: 'ctx:{"a":1}' },
     });
   });
 
-  test("sends basic auth and the directory on every call", async () => {
-    const server = fake((call) => (call.path.endsWith("/command") ? json(assistant([text("x")])) : json([])));
-    await runAgent(request(server, { pollMs: 5 }));
+  test("sends basic auth with the fixed username on every call", async () => {
+    const server = fake();
+    await runAgent(request(server));
     const expected = `Basic ${Buffer.from("opencode:secret").toString("base64")}`;
-    expect(server.calls.length).toBeGreaterThanOrEqual(2);
-    for (const call of server.calls) {
-      expect(call.authorization).toBe(expected);
-      expect(call.directory).toBe("/repo");
-    }
+    expect(server.calls.length).toBeGreaterThanOrEqual(3);
+    for (const call of server.calls) expect(call.authorization).toBe(expected);
   });
 
-  test("ignores synthetic and ignored text parts and non-text parts", () => {
+  test("ignores non-text content parts", () => {
     expect(
-      extractMessage(assistant([text("a"), text("b", { synthetic: true }), text("c", { ignored: true }), { type: "tool" }, text("d")])),
+      extractMessage(assistant([text("a"), { type: "reasoning", text: "hidden" }, { type: "tool" }, text("d")])),
     ).toEqual({ output: "a\nd", error: null });
   });
 
-  test("reports only the model error name, not its message", async () => {
-    const server = fake(() => json(assistant([], { name: "APIError", data: { message: "rate\nlimited" } })));
+  test("reports a model error from the final message", async () => {
+    const server = fake((call) =>
+      call.path === "/api/session/ses1/message" && call.query.get("type") === "assistant"
+        ? page([assistant([], { type: "APIError", message: "rate\nlimited" })])
+        : undefined,
+    );
     const result = await runAgent(request(server));
-    expect(result.error).toBe("APIError");
-    expect(describeRun(result)).toBe("agent error: APIError");
+    expect(result.error).toBe("APIError: rate limited");
     expect(result.output).toBe("");
   });
 
-  test("a model error without a name does not expose its message", () => {
-    expect(extractMessage(assistant([], { data: { message: "private detail" } }))).toEqual({ output: "", error: "error" });
+  test("a run that ends in failure without a model error is reported", async () => {
+    const server = fake((call) =>
+      call.path === "/api/session/ses1/message" && call.query.get("type") === "idle" ? page([idle("failed")]) : undefined,
+    );
+    expect((await runAgent(request(server))).error).toBe("run failed");
   });
 
-  test("an unexpected command response is an error", async () => {
-    const server = fake(() => json({ nope: true }));
-    expect((await runAgent(request(server))).error).toBe("unexpected response");
+  test("a failed run without an assistant message reports the cause from the idle message", async () => {
+    const server = fake((call) => {
+      if (call.path !== "/api/session/ses1/message") return undefined;
+      if (call.query.get("type") === "assistant") return page([]);
+      return page([{ ...idle("failed"), error: { type: "provider.no-route", message: "No model is available" } }]);
+    });
+    expect((await runAgent(request(server))).error).toBe("provider.no-route: No model is available");
+  });
+
+  test("a run that succeeds without an assistant message is an error", async () => {
+    const server = fake((call) =>
+      call.path === "/api/session/ses1/message" && call.query.get("type") === "assistant" ? page([]) : undefined,
+    );
+    expect((await runAgent(request(server))).error).toBe("no assistant message");
   });
 
   test("a failing session create is reported without a session", async () => {
-    const server = fake(() => json({}));
-    const failing = { ...server, fetch: (async () => json({ name: "Unauthorized" }, 401)) as unknown as typeof fetch };
+    const server = fake();
+    const failing = { ...server, fetch: (async () => unexpected(401)) as unknown as typeof fetch };
     const result = await runAgent(request(failing));
-    expect(result).toMatchObject({ sessionId: null, error: "session create failed: HTTP 401" });
+    expect(result).toMatchObject({ sessionId: null, error: "session create failed: NotAuthorized" });
     expect(server.calls).toEqual([]);
   });
 
   test("an HTTP error on the command is reported and not retried", async () => {
-    const server = fake((call) => (call.path.endsWith("/command") ? json({ name: "NotFoundError" }, 404) : json([])));
+    const server = fake((call) => (call.path === "/api/session/ses1/command" ? unexpected(404) : undefined));
     const result = await runAgent(request(server));
-    expect(result.error).toBe("command failed: HTTP 404");
-    expect(server.calls.filter((c) => c.path.endsWith("/command"))).toHaveLength(1);
+    expect(result.error).toMatch(/^run failed: /);
+    expect(server.calls.filter((c) => c.path === "/api/session/ses1/command")).toHaveLength(1);
   });
 
-  test("on timeout it aborts the server session and reports timedOut", async () => {
-    const server = fake((call, signal) => {
-      if (call.path === "/session/ses1/abort") return json(true);
-      if (call.path === "/session/ses1/command") return hangUntilAborted(call, signal);
-      return json([]);
-    });
+  test("on timeout it interrupts the server session and reports timedOut", async () => {
+    const server = fake((call, signal) => (call.path === "/api/experimental/session/ses1/wait" ? hangUntilAborted(call, signal) : undefined));
     const result = await runAgent(request(server, { timeoutMs: 40 }));
     expect(result).toMatchObject({ timedOut: true, aborted: false, error: null, sessionId: "ses1" });
-    const abort = server.calls.filter((c) => c.path === "/session/ses1/abort");
-    expect(abort).toHaveLength(1);
-    expect(abort[0].method).toBe("POST");
+    const interrupts = server.calls.filter((c) => c.path === "/api/session/ses1/interrupt");
+    expect(interrupts).toHaveLength(1);
+    expect(interrupts[0].method).toBe("POST");
   });
 
-  test("an abort signal aborts the server session and reports aborted", async () => {
+  test("an abort signal interrupts the server session and reports aborted", async () => {
     const controller = new AbortController();
     const server = fake((call, signal) => {
-      if (call.path === "/session/ses1/abort") return json(true);
-      if (call.path === "/session/ses1/command") {
-        setTimeout(() => controller.abort(), 20);
-        return hangUntilAborted(call, signal);
-      }
-      return json([]);
+      if (call.path !== "/api/experimental/session/ses1/wait") return undefined;
+      setTimeout(() => controller.abort(), 20);
+      return hangUntilAborted(call, signal);
     });
     const result = await runAgent(request(server, { signal: controller.signal }));
     expect(result).toMatchObject({ aborted: true, timedOut: false });
-    expect(server.calls.some((c) => c.path === "/session/ses1/abort")).toBe(true);
+    expect(server.calls.some((c) => c.path === "/api/session/ses1/interrupt")).toBe(true);
   });
 
   test("an already aborted signal never leaves the session running", async () => {
     const controller = new AbortController();
     controller.abort();
-    const server = fake((call, signal) => (call.path === "/session/ses1/abort" ? json(true) : hangUntilAborted(call, signal)));
+    const server = fake((call, signal) => (call.path === "/api/experimental/session/ses1/wait" ? hangUntilAborted(call, signal) : undefined));
     const result = await runAgent(request(server, { signal: controller.signal }));
     expect(result.aborted).toBe(true);
-    expect(server.calls.some((c) => c.path === "/session/ses1/abort")).toBe(true);
+    expect(server.calls.some((c) => c.path === "/api/session/ses1/interrupt")).toBe(true);
   });
 
-  test("a failed server abort with a session that goes idle is an ordinary timeout", async () => {
+  test("a failed interrupt with a session that goes idle is an ordinary timeout", async () => {
     const server = fake((call, signal) => {
-      if (call.path === "/session/ses1/abort") return json({}, 500);
-      if (call.path === "/session/ses1/command") return hangUntilAborted(call, signal);
-      if (call.path === "/session/status") return json({});
-      return json([]);
+      if (call.path === "/api/session/ses1/interrupt") return unexpected(500);
+      return call.path === "/api/experimental/session/ses1/wait" ? hangUntilAborted(call, signal) : undefined;
     });
     const result = await runAgent(request(server, { timeoutMs: 30 }));
     expect(result).toMatchObject({ timedOut: true, stuck: false, error: null });
   });
 
-  test("a failed server abort with a session that stays busy is stuck", async () => {
+  test("a failed interrupt with a session that stays running is stuck", async () => {
     const server = fake((call, signal) => {
-      if (call.path === "/session/ses1/abort") return json({}, 500);
-      if (call.path === "/session/ses1/command") return hangUntilAborted(call, signal);
-      if (call.path === "/session/status") return json({ ses1: { type: "busy" } });
-      return json([]);
+      if (call.path === "/api/session/ses1/interrupt") return unexpected(500);
+      if (call.path === "/api/session/active") return json({ data: { ses1: { type: "running" } } });
+      return call.path === "/api/experimental/session/ses1/wait" ? hangUntilAborted(call, signal) : undefined;
     });
     const result = await runAgent(request(server, { timeoutMs: 30, stuckWaitMs: 100, pollMs: 10 }));
     expect(result).toMatchObject({ timedOut: true, stuck: true, error: "session could not be aborted" });
     expect(describeRun(result)).toBe("session could not be aborted");
   });
 
-  test("a stuck session after a shutdown abort is reported as stuck too", async () => {
-    const controller = new AbortController();
-    const server = fake((call, signal) => {
-      if (call.path === "/session/ses1/abort") return json({}, 500);
-      if (call.path === "/session/ses1/command") {
-        setTimeout(() => controller.abort(), 10);
-        return hangUntilAborted(call, signal);
-      }
-      if (call.path === "/session/status") return json({ ses1: { type: "retry" } });
-      return json([]);
-    });
-    const result = await runAgent(request(server, { signal: controller.signal, stuckWaitMs: 60, pollMs: 10 }));
-    expect(result).toMatchObject({ aborted: true, stuck: true });
-  });
-
   test("during shutdown the wait for an unabortable session is capped separately and short", async () => {
     const controller = new AbortController();
     const server = fake((call, signal) => {
-      if (call.path === "/session/ses1/abort") return json({}, 500);
-      if (call.path === "/session/ses1/command") {
-        setTimeout(() => controller.abort(), 10);
-        return hangUntilAborted(call, signal);
-      }
-      if (call.path === "/session/status") return json({ ses1: { type: "busy" } });
-      return json([]);
+      if (call.path === "/api/session/ses1/interrupt") return unexpected(500);
+      if (call.path === "/api/session/active") return json({ data: { ses1: { type: "running" } } });
+      if (call.path !== "/api/experimental/session/ses1/wait") return undefined;
+      setTimeout(() => controller.abort(), 10);
+      return hangUntilAborted(call, signal);
     });
     const started = Date.now();
     const result = await runAgent(
@@ -225,123 +229,126 @@ describe("runAgent", () => {
     expect(Date.now() - started).toBeLessThan(3_000);
   });
 
-  test("a finished answer wins over a timeout that fired at the same moment", async () => {
-    const server = fake(async (call) => {
-      if (call.path === "/session/ses1/abort") return json(true);
-      if (call.path === "/session/ses1/command") {
-        await new Promise((resolve) => setTimeout(resolve, 80));
-        return json(assistant([text("done MENTION-RESULT")]));
+  test("waits for subagent sessions to go idle before reading the result", async () => {
+    let activeCalls = 0;
+    const server = fake((call) => {
+      if (call.path === "/api/session" && call.query.get("parentID") === "ses1") {
+        return page([{ id: "ses2", parentID: "ses1" }]);
       }
-      return json([]);
+      if (call.path === "/api/session/active") {
+        activeCalls++;
+        return json({ data: activeCalls < 3 ? { ses2: { type: "running" } } : {} });
+      }
+      return undefined;
     });
-    const result = await runAgent(request(server, { timeoutMs: 30 }));
-    expect(result).toMatchObject({ timedOut: false, aborted: false, stuck: false, error: null, output: "done MENTION-RESULT" });
+    const result = await runAgent(request(server));
+    expect(result).toMatchObject({ error: null, output: "done\nMENTION-RESULT: {}" });
+    expect(activeCalls).toBe(3);
   });
 
-  test("an answer with a model error does not hide the timeout", async () => {
+  test("a finished answer wins over a timeout that fired at the same moment", async () => {
     const server = fake(async (call) => {
-      if (call.path === "/session/ses1/abort") return json(true);
-      if (call.path === "/session/ses1/command") {
-        await new Promise((resolve) => setTimeout(resolve, 80));
-        return json(assistant([], { name: "MessageAbortedError", data: { message: "aborted" } }));
-      }
-      return json([]);
+      if (call.path !== "/api/experimental/session/ses1/wait") return undefined;
+      await new Promise((resolve) => setTimeout(resolve, 80));
+      return noContent();
     });
     const result = await runAgent(request(server, { timeoutMs: 30 }));
-    expect(result).toMatchObject({ timedOut: true });
+    expect(result).toMatchObject({ timedOut: false, aborted: false, stuck: false, error: null, output: "done\nMENTION-RESULT: {}" });
   });
 
   test("rejects pending permission requests of this session only", async () => {
-    let release!: (response: Response) => void;
-    const server = fake((call) => {
-      if (call.path === "/session/ses1/command") return new Promise<Response>((resolve) => (release = resolve));
-      if (call.method === "GET" && call.path === "/permission") {
-        return json([
-          { id: "per1", sessionID: "ses1", permission: "bash", patterns: [], metadata: {}, always: [] },
-          { id: "per2", sessionID: "ses2", permission: "edit", patterns: [], metadata: {}, always: [] },
-        ]);
+    let release!: () => void;
+    const released = new Promise<void>((resolve) => (release = resolve));
+    const server = fake(async (call) => {
+      if (call.path === "/api/experimental/session/ses1/wait") {
+        await released;
+        return noContent();
       }
-      if (call.path.endsWith("/children")) return json([]);
-      if (call.path === "/permission/per1/reply") {
-        release(json(assistant([text("ok")])));
-        return json(true);
+      if (call.path === "/api/permission/request") {
+        return json({
+          location: { directory: "/repo" },
+          data: [
+            { id: "per1", sessionID: "ses1", action: "shell", resources: ["rm"] },
+            { id: "per2", sessionID: "ses2", action: "edit", resources: ["x"] },
+          ],
+        });
       }
-      return json(false);
+      if (call.path === "/api/session/ses1/permission/per1/reply") {
+        release();
+        return noContent();
+      }
+      return undefined;
     });
     const events: string[] = [];
     const result = await runAgent(request(server, { onEvent: (event, detail) => events.push(`${event}:${detail}`) }));
-    expect(result.output).toBe("ok");
-    expect(events).toEqual(["permission-rejected:bash"]);
-    const replies = server.calls.filter((c) => c.path.startsWith("/permission/") && c.method === "POST");
-    expect(replies.map((c) => c.path)).toEqual(["/permission/per1/reply"]);
-    expect(replies[0].body).toEqual({ reply: "reject" });
-  });
-
-  test("rejects permission requests of subagent child and grandchild sessions, not of unrelated ones", async () => {
-    let release!: (response: Response) => void;
-    const perm = (id: string, sessionID: string, permission: string) => ({
-      id, sessionID, permission, patterns: [], metadata: {}, always: [],
-    });
-    const server = fake((call) => {
-      if (call.path === "/session/ses1/command") return new Promise<Response>((resolve) => (release = resolve));
-      if (call.method === "GET" && call.path === "/permission") {
-        return json([perm("per1", "ses2", "bash"), perm("per2", "ses3", "edit"), perm("per3", "ses9", "webfetch")]);
-      }
-      if (call.path === "/session/ses1/children") return json([{ id: "ses2" }]);
-      if (call.path === "/session/ses2/children") return json([{ id: "ses3" }]);
-      if (call.path === "/session/ses3/children") return json([]);
-      if (call.method === "POST" && call.path === "/permission/per2/reply") {
-        release(json(assistant([text("ok")])));
-        return json(true);
-      }
-      return json(true);
-    });
-    const events: string[] = [];
-    const result = await runAgent(request(server, { onEvent: (event, detail) => events.push(`${event}:${detail}`) }));
-    expect(result.output).toBe("ok");
-    expect(events).toEqual(["permission-rejected:bash", "permission-rejected:edit"]);
-    const replied = server.calls.filter((c) => c.method === "POST" && c.path.startsWith("/permission/")).map((c) => c.path);
-    expect(replied).toEqual(["/permission/per1/reply", "/permission/per2/reply"]);
-    expect(replied).not.toContain("/permission/per3/reply");
+    expect(result.output).toBe("done\nMENTION-RESULT: {}");
+    expect(events).toEqual(["permission-rejected:shell"]);
+    const replies = server.calls.filter((c) => c.method === "POST" && c.path.endsWith("/reply"));
+    expect(replies.map((c) => c.path)).toEqual(["/api/session/ses1/permission/per1/reply"]);
+    expect(replies[0].body).toEqual({ decision: "reject" });
   });
 
   test("a failing permission poll is reported, not fatal", async () => {
-    let release!: (response: Response) => void;
-    const server = fake((call) => {
-      if (call.path === "/session/ses1/command") return new Promise<Response>((resolve) => (release = resolve));
-      release?.(json(assistant([text("ok")])));
-      return json({}, 500);
+    let release!: () => void;
+    const released = new Promise<void>((resolve) => (release = resolve));
+    const server = fake(async (call) => {
+      if (call.path === "/api/experimental/session/ses1/wait") {
+        await released;
+        return noContent();
+      }
+      if (call.path === "/api/permission/request") {
+        release();
+        return unexpected(500);
+      }
+      return undefined;
     });
     const events: string[] = [];
     const result = await runAgent(request(server, { onEvent: (event, detail) => events.push(`${event}:${detail}`) }));
-    expect(result.output).toBe("ok");
-    expect(events[0]).toBe("poll-error:HTTP 500");
+    expect(result.output).toBe("done\nMENTION-RESULT: {}");
+    expect(events[0]).toMatch(/^poll-error:/);
   });
 
-  test("a dropped command connection recovers the final message once the session is idle", async () => {
-    let statusCalls = 0;
-    const server = fake((call) => {
-      if (call.path === "/session/ses1/command") return Promise.reject(new TypeError("connection reset"));
-      if (call.path === "/session/status") return json(++statusCalls < 2 ? { ses1: { type: "busy" } } : {});
-      if (call.path === "/session/ses1/message") {
-        return json([
-          { info: { role: "user" }, parts: [text("prompt")] },
-          assistant([text("recovered")]),
-        ]);
+  test("a dropped command connection is reported", async () => {
+    const server = fake((call) =>
+      call.path === "/api/session/ses1/command" ? (Promise.reject(new TypeError("connection reset")) as Promise<Response>) : undefined,
+    );
+    expect((await runAgent(request(server))).error).toBe("run failed: Transport: connection reset");
+  });
+
+  test("cancels question forms of this session family, not of unrelated sessions", async () => {
+    let release!: () => void;
+    const released = new Promise<void>((resolve) => (release = resolve));
+    const form = (id: string, sessionID: string, kind: string) => ({
+      id,
+      sessionID,
+      title: "Question",
+      metadata: { kind },
+      fields: [],
+    });
+    const server = fake(async (call) => {
+      if (call.path === "/api/experimental/session/ses1/wait") {
+        await released;
+        return noContent();
       }
-      return json([]);
+      if (call.path === "/api/form") {
+        return json({
+          location: { directory: "/repo" },
+          data: [form("f1", "ses1", "question"), form("f2", "ses9", "question"), form("f3", "ses1", "other")],
+        });
+      }
+      if (call.path === "/api/session" && call.query.get("parentID") === "ses1") return page([]);
+      if (call.method === "DELETE" && call.path === "/api/session/ses1/form/f1") {
+        release();
+        return noContent();
+      }
+      return undefined;
     });
-    const result = await runAgent(request(server));
-    expect(result).toMatchObject({ output: "recovered", error: null });
-    expect(statusCalls).toBe(2);
-  });
-
-  test("a dropped connection with an unreachable server is reported", async () => {
-    const server = fake((call) => {
-      if (call.path === "/session/ses1/command" || call.path === "/session/status") return Promise.reject(new TypeError("down"));
-      return json([]);
-    });
-    expect((await runAgent(request(server))).error).toBe("connection lost: TypeError");
+    const events: string[] = [];
+    const result = await runAgent(request(server, { onEvent: (event, detail) => events.push(`${event}:${detail}`) }));
+    expect(result.output).toBe("done\nMENTION-RESULT: {}");
+    expect(events).toEqual(["question-rejected:rejected"]);
+    const cancelled = server.calls.filter((c) => c.method === "DELETE").map((c) => c.path);
+    expect(cancelled).toEqual(["/api/session/ses1/form/f1"]);
   });
 });
 
@@ -350,45 +357,6 @@ describe("describeRun", () => {
   test("names the most specific cause", () => {
     expect(describeRun({ ...base, aborted: true })).toBe("poller stopped");
     expect(describeRun({ ...base, timedOut: true })).toBe("timeout after 2 min");
-    expect(describeRun({ ...base, error: "APIError" })).toBe("agent error: APIError");
-  });
-});
-
-describe("question rejection", () => {
-  test("rejects questions of the session tree, not unrelated sessions", async () => {
-    let release!: (response: Response) => void;
-    const server = fake((call) => {
-      if (call.path.endsWith("/command")) return new Promise<Response>((resolve) => { release = resolve; });
-      if (call.path === "/permission") return json([]);
-      if (call.path === "/question") return json([
-        { id: "root", sessionID: "ses1" }, { id: "child", sessionID: "ses2" },
-        { id: "grandchild", sessionID: "ses3" }, { id: "other", sessionID: "ses9" },
-      ]);
-      if (call.path === "/session/ses1/children") return json([{ id: "ses2" }]);
-      if (call.path === "/session/ses2/children") return json([{ id: "ses3" }]);
-      if (call.path.endsWith("/children")) return json([]);
-      if (call.path === "/question/grandchild/reject") release(json(assistant([text("ok")])));
-      return json(true);
-    }, true);
-    expect((await runAgent(request(server))).output).toBe("ok");
-    expect(server.calls.filter((call) => call.method === "POST" && call.path.startsWith("/question/")).map((call) => call.path))
-      .toEqual(["/question/root/reject", "/question/child/reject", "/question/grandchild/reject"]);
-  });
-
-  for (const unavailable of ["list", "reject"]) test(`404 on ${unavailable} is non-fatal and logged once`, async () => {
-    const events: string[] = [];
-    const server = fake(async (call) => {
-      if (call.path.endsWith("/command")) {
-        await new Promise((resolve) => setTimeout(resolve, 65));
-        return json(assistant([text("ok")]));
-      }
-      if (call.path === "/permission") return json([]);
-      if (call.path === "/question") return unavailable === "list" ? json({}, 404) : json([{ id: "q1", sessionID: "ses1" }]);
-      if (call.path === "/question/q1/reject") return json({}, 404);
-      return json([]);
-    }, true);
-    expect((await runAgent(request(server, { onEvent: (event) => events.push(event) }))).output).toBe("ok");
-    expect(events).toEqual(["question-unavailable"]);
-    expect(server.calls.filter((call) => call.path === "/question")).toHaveLength(1);
+    expect(describeRun({ ...base, error: "APIError: x" })).toBe("agent error: APIError: x");
   });
 });

@@ -7,16 +7,14 @@ services:
       args:
         USER_UID: ${USER_UID:?USER_UID is not set. Run via make commands}
         USER_GID: ${USER_GID:?USER_GID is not set. Run via make commands}
-        OPENCODE_VERSION: ${OPENCODE_VERSION:-}
-        OH_MY_OPENCODE_SLIM_VERSION: ${OH_MY_OPENCODE_SLIM_VERSION:-}
+        OPENCODE_VERSION: ${OPENCODE_VERSION:-2.4.1}
+        OH_MY_OPENCODE_SLIM_VERSION: ${OH_MY_OPENCODE_SLIM_VERSION:-3.0.8}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./.opencode/config:/home/opencode/.config/opencode
       - opencode_share:/home/opencode/.local/share/opencode
     environment:
       OPENCODE_DISABLE_AUTOUPDATE: true
-      OPENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS: "true"
-      OPENCODE_ENABLE_EXA: "1"
       OPENCODE_SERVER_PASSWORD: ${OPENCODE_SERVER_PASSWORD:?OPENCODE_SERVER_PASSWORD is not set. Set it in .env}
       # Optional private registry login, see README "Corporate CA and private registry".
       DOCKER_REGISTRY: ${DOCKER_REGISTRY:-}

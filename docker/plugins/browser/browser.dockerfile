@@ -25,5 +25,8 @@ RUN curl -fsSL https://bun.sh/install | BUN_INSTALL=/usr/local bash
 
 # Install Chromium browser binary into the opencode user's home directory
 USER opencode
-RUN bun x playwright@1.60.0-alpha-1777566615000 install chromium
+# Uses the playwright build that @playwright/mcp depends on, so the browser always matches the
+# MCP server. Keep the version equal to browser.opencode.jsonc and browser.package.json (Renovate
+# updates all three together).
+RUN bun x --package @playwright/mcp@0.0.72 playwright install chromium
 USER root

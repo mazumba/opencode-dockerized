@@ -1,13 +1,105 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["config:recommended"],
-  "enabledManagers": ["dockerfile"],
+  "extends": [
+    "config:recommended"
+  ],
+  "enabledManagers": [
+    "dockerfile",
+    "npm",
+    "custom.regex"
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "OpenCode version the image installs (default of OPENCODE_VERSION)",
+      "managerFilePatterns": [
+        "/^compose\\.yml$/"
+      ],
+      "matchStrings": [
+        "OPENCODE_VERSION: \\$\\{OPENCODE_VERSION:-(?<currentValue>[^}]+)\\}"
+      ],
+      "depNameTemplate": "@opencode/cli",
+      "datasourceTemplate": "npm"
+    },
+    {
+      "customType": "regex",
+      "description": "oh-my-opencode-slim version the installer uses (default of OH_MY_OPENCODE_SLIM_VERSION)",
+      "managerFilePatterns": [
+        "/^compose\\.yml$/"
+      ],
+      "matchStrings": [
+        "OH_MY_OPENCODE_SLIM_VERSION: \\$\\{OH_MY_OPENCODE_SLIM_VERSION:-(?<currentValue>[^}]+)\\}"
+      ],
+      "depNameTemplate": "oh-my-opencode-slim",
+      "datasourceTemplate": "npm"
+    },
+    {
+      "customType": "regex",
+      "description": "oh-my-opencode-slim version OpenCode loads (plugin entry)",
+      "managerFilePatterns": [
+        "/^\\.opencode/config/opencode\\.jsonc\\.base\\.dist$/"
+      ],
+      "matchStrings": [
+        "\"oh-my-opencode-slim@(?<currentValue>[^\"]+)\""
+      ],
+      "depNameTemplate": "oh-my-opencode-slim",
+      "datasourceTemplate": "npm"
+    },
+    {
+      "customType": "regex",
+      "description": "@playwright/mcp in the browser plugin: MCP command, Chromium install, and package fragment",
+      "managerFilePatterns": [
+        "/^docker/plugins/browser/browser\\.opencode\\.jsonc$/",
+        "/^docker/plugins/browser/browser\\.dockerfile$/",
+        "/^docker/plugins/browser/browser\\.package\\.json$/"
+      ],
+      "matchStrings": [
+        "@playwright/mcp@(?<currentValue>[0-9][^\\s\"]*)",
+        "\"@playwright/mcp\": \"(?<currentValue>[^\"]+)\""
+      ],
+      "depNameTemplate": "@playwright/mcp",
+      "datasourceTemplate": "npm"
+    }
+  ],
   "packageRules": [
     {
       "description": "Debian major upgrades also need apt sources and plugin package names changed; do them by hand",
-      "matchDatasources": ["docker"],
-      "matchPackageNames": ["debian"],
-      "matchUpdateTypes": ["major"],
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchPackageNames": [
+        "debian"
+      ],
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "enabled": false
+    },
+    {
+      "description": "The server and the pollers' client share the V2 API contract: update them together",
+      "groupName": "OpenCode",
+      "matchPackageNames": [
+        "@opencode/cli",
+        "@opencode/client"
+      ]
+    },
+    {
+      "description": "The installer pin and the runtime plugin pin must match",
+      "groupName": "oh-my-opencode-slim",
+      "matchPackageNames": [
+        "oh-my-opencode-slim"
+      ]
+    },
+    {
+      "description": "Majors change the plugin API, the server API or the Slim config; do them by hand",
+      "matchPackageNames": [
+        "@opencode/cli",
+        "@opencode/client",
+        "oh-my-opencode-slim"
+      ],
+      "matchUpdateTypes": [
+        "major"
+      ],
       "enabled": false
     }
   ]

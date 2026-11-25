@@ -339,7 +339,6 @@ describe("loadConfig", () => {
     expect(config.timeoutWorkMs).toBe(60 * 60_000);
     expect(config.opencodeUrl).toBe("http://opencode:4096");
     expect(config.once).toBe(false);
-    expect(config.opencodeUsername).toBe("opencode");
     expect(config.opencodePassword).toBe("p");
     expect(config.maxAutomated).toBe(3);
   });
@@ -349,9 +348,9 @@ describe("loadConfig", () => {
     expect(loadConfig({ ...env, KANBAN_PROJECTS_ROOT: "/srv/projects/" }, []).projectsRoot).toBe("/srv/projects");
     expect(() => loadConfig({ ...env, KANBAN_PROJECTS_ROOT: "projects" }, [])).toThrow(ConfigError);
   });
-  test("reads the server username and the pool size", () => {
-    const config = loadConfig({ ...env, OPENCODE_SERVER_USERNAME: "u", KANBAN_MAX_AUTOMATED: "5" }, []);
-    expect(config).toMatchObject({ opencodeUsername: "u", maxAutomated: 5 });
+  test("reads the pool size", () => {
+    const config = loadConfig({ ...env, KANBAN_MAX_AUTOMATED: "5" }, []);
+    expect(config).toMatchObject({ maxAutomated: 5 });
   });
   test("the pool size must be a positive integer", () => {
     for (const value of ["0", "1.5", "-1", "x"]) {

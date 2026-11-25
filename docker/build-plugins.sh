@@ -120,11 +120,11 @@ done < "$BASE"
 
 # ── Phase 2: npm package.json merge ──────────────────────────────────────────
 # Start from the committed package.json (strip any previously injected plugin deps)
-# Strategy: rebuild dependencies from base (only @opencode-ai/plugin) then add plugin deps
+# Strategy: rebuild dependencies from base (only @opencode/plugin) then add plugin deps
 base_pkg_deps="{}"
 if [ -f "$PACKAGE_JSON" ]; then
     # Extract only non-plugin deps (everything that was there originally)
-    # Since package.json is simple, we rebuild it from scratch keeping @opencode-ai/plugin
+    # Since package.json is simple, we rebuild it from scratch keeping @opencode/plugin
     base_pkg_deps="$(cat "$PACKAGE_JSON")"
 fi
 

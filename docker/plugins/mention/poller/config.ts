@@ -12,7 +12,6 @@ export interface Config {
   timeoutMs: number;
   maxConcurrent: number;
   opencodeUrl: string;
-  username: string;
   password: string;
   once: boolean;
   dryRun: boolean;
@@ -52,7 +51,7 @@ export function loadConfig(env: Record<string, string | undefined>, argv: string
     pollIntervalMs: number("MENTION_POLL_INTERVAL", 60) * 1_000,
     lookbackMs: number("MENTION_LOOKBACK_HOURS", 24) * 3_600_000,
     timeoutMs: number("MENTION_TIMEOUT", 45) * 60_000, maxConcurrent, opencodeUrl,
-    username: env.OPENCODE_SERVER_USERNAME || "opencode", password: required("OPENCODE_SERVER_PASSWORD"),
+    password: required("OPENCODE_SERVER_PASSWORD"),
     once: argv.includes("--once"), dryRun: argv.includes("--dry-run"),
   };
 }

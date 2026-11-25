@@ -30,7 +30,7 @@ Comments that fail the role check are logged and get no reaction. Keep the allow
 6. If the agent cannot push (PR from a fork, a rejected push, a missing App permission), the commits stay in the worktree and the reply says why and how to push them by hand.
 7. The run ends with a line `MENTION-RESULT: <json>`. If the agent posted no reply (error, timeout, missing or invalid result line), the poller posts `mention-poller: run failed — <reason>`. The exception is `{"outcome":"silent"}` from a run that ended cleanly: the agent skipped the reply on purpose after a clean rebase, so the poller posts nothing. It never posts a second reply when the agent already answered.
 
-One run per PR at a time, at most `MENTION_MAX_CONCURRENT` runs in total, oldest comment first. A mention that has to wait stays unclaimed until a slot frees up. Permission requests from the run's sessions are rejected. Questions are rejected too where the server has the `/question` routes; on a server without them, an agent that asks anyway hangs until `MENTION_TIMEOUT`. On SIGTERM the poller aborts its sessions and exits within 50 s.
+One run per PR at a time, at most `MENTION_MAX_CONCURRENT` runs in total, oldest comment first. A mention that has to wait stays unclaimed until a slot frees up. Permission requests and questions (`question` tool forms) from the run's session and its subagent sessions are rejected. On SIGTERM the poller aborts its sessions and exits within 50 s.
 
 ## Rebasing
 
@@ -72,7 +72,7 @@ Set these in `.env`. Compose refuses to start any service while the plugin is en
 | `MENTION_LOOKBACK_HOURS` | `24` | ignore older comments |
 | `MENTION_TIMEOUT` | `45` | minutes before a run is aborted |
 | `MENTION_MAX_CONCURRENT` | `2` | runs at once (one per PR) |
-| `MENTION_OPENCODE_URL` | `http://opencode:4096` | opencode server (user `opencode`, or `OPENCODE_SERVER_USERNAME`) |
+| `MENTION_OPENCODE_URL` | `http://opencode:4096` | OpenCode 2 server the poller starts sessions on (Basic auth, user `opencode`) |
 
 The poller reads the App slug with `GET /app` at startup, so the handle and the bot login need no setup. It uses the `github` plugin's `GH_APP_*` variables. The App needs Contents and Issues read & write (push, reactions, replies) and Pull requests read. Pushes that change `.github/workflows/` also need the Workflows permission.
 

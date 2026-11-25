@@ -189,7 +189,7 @@ Set these in `.env`.
 | `KANBAN_TEAM` | `DEY` | Linear team key |
 | `KANBAN_POLL_INTERVAL` | `60` | seconds between passes |
 | `KANBAN_PROJECTS_ROOT` | empty | absolute path of the directory that holds the checkouts: a project without `path:` uses `<root>/<repo name>` and is cloned there if missing. Mount it at the same path in both containers |
-| `KANBAN_OPENCODE_URL` | `http://opencode:4096` | opencode server the poller starts sessions on (user `opencode`; set `OPENCODE_SERVER_USERNAME` in the poller's environment if the server uses another) |
+| `KANBAN_OPENCODE_URL` | `http://opencode:4096` | OpenCode 2 server the poller starts sessions on (Basic auth, user `opencode`) |
 | `KANBAN_MAX_AUTOMATED` | `3` | how many work, fix, and review runs may be active at once; investigations are not counted |
 | `KANBAN_CI_PENDING_TIMEOUT` | `30` | minutes a PR may wait for CI before the ticket goes to `Needs human` |
 | `KANBAN_TIMEOUT_WORK` | `60` | minutes before a work run is aborted |
@@ -206,4 +206,4 @@ The poller logs only ticket identifiers, actions, results, and durations: never 
 - Every git command the poller runs is started with `core.hooksPath=/dev/null` and `core.fsmonitor=false`, so repo-controlled config in a worktree cannot run code in the poller.
 - It runs agents unattended with unrestricted `bash`.
 - `main` is not protected by the plugin: unless you enable branch protection, an agent can push to `main`.
-- Delegation to subagents is allowed, so a run can hang until its timeout aborts it. The worker, reviewer, and investigator may only delegate to the read-only `explorer` and `librarian` subagents; all edits, commits, and pushes stay with the worker itself.
+- Delegation to subagents is allowed, so a run can hang until its timeout aborts it. The worker, reviewer, and investigator may only delegate to the read-only `explorer` subagent (code and external docs); all edits, commits, and pushes stay with the worker itself.

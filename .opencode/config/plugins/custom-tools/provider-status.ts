@@ -1,9 +1,9 @@
 import { readFile } from "node:fs/promises"
 import { homedir } from "node:os"
 import path from "node:path"
-import { tool } from "@opencode-ai/plugin"
 
-// Reports the status of OpenAI-compatible providers from the global opencode config:
+// Reports the status of OpenAI-compatible providers from the global opencode config (V1-shaped
+// `provider` entries, which OpenCode 2 still reads):
 // the LiteLLM budget (/key/info) when the proxy exposes it, and per-model availability
 // from a 1-token request. Secrets come only from the {env:...}/{file:...} references
 // in the config and are never printed.
@@ -157,37 +157,44 @@ async function providerReport(id: string, provider: ProviderConfig, models: stri
   return lines.join("\n")
 }
 
-export default tool({
-  description:
-    "Check OpenAI-compatible providers from the global opencode config (e.g. LiteLLM proxies): budget from /key/info when exposed, and per-model availability or throttling via a 1-token request. Each run costs a few tokens per model.",
-  args: {
-    provider: tool.schema
-      .string()
-      .optional()
-      .describe("Provider ID from opencode.jsonc. Defaults to every @ai-sdk/openai-compatible provider."),
-    models: tool.schema
-      .array(tool.schema.string())
-      .optional()
-      .describe("Model IDs to probe. Defaults to the provider's configured models."),
-  },
-  async execute(args, _context) {
-    let loaded: Awaited<ReturnType<typeof loadConfig>>
-    try {
-      loaded = await loadConfig()
-    } catch (e) {
-      return `Error reading opencode config: ${e instanceof Error ? e.message : String(e)}`
-    }
+export interface ProviderStatusInput {
+  provider?: string
+  models?: string[]
+}
 
-    const providers = Object.entries(loaded.config.provider ?? {}).filter(([id, p]) =>
-      args.provider ? id === args.provider : p.npm === COMPATIBLE_NPM,
-    )
-    if (providers.length === 0) {
-      return args.provider
-        ? `Provider "${args.provider}" not found in ${loaded.file}.`
-        : `No ${COMPATIBLE_NPM} providers configured in ${loaded.file}.`
-    }
-
-    const reports = await Promise.all(providers.map(([id, p]) => providerReport(id, p, args.models)))
-    return reports.join("\n\n")
+export const providerStatusInputSchema = {
+  type: "object",
+  properties: {
+    provider: {
+      type: "string",
+      description: "Provider ID from opencode.jsonc. Defaults to every @ai-sdk/openai-compatible provider.",
+    },
+    models: {
+      type: "array",
+      items: { type: "string" },
+      description: "Model IDs to probe. Defaults to the provider's configured models.",
+    },
   },
-})
+  additionalProperties: false,
+} as const
+
+export async function providerStatus(args: ProviderStatusInput): Promise<string> {
+  let loaded: Awaited<ReturnType<typeof loadConfig>>
+  try {
+    loaded = await loadConfig()
+  } catch (e) {
+    return `Error reading opencode config: ${e instanceof Error ? e.message : String(e)}`
+  }
+
+  const providers = Object.entries(loaded.config.provider ?? {}).filter(([id, p]) =>
+    args.provider ? id === args.provider : p.npm === COMPATIBLE_NPM,
+  )
+  if (providers.length === 0) {
+    return args.provider
+      ? `Provider "${args.provider}" not found in ${loaded.file}.`
+      : `No ${COMPATIBLE_NPM} providers configured in ${loaded.file}.`
+  }
+
+  const reports = await Promise.all(providers.map(([id, p]) => providerReport(id, p, args.models)))
+  return reports.join("\n\n")
+}
