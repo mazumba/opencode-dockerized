@@ -42,5 +42,6 @@
   // OH_MY_OPENCODE_SLIM_VERSION (compose.yml), which only pins the build-time installer.
   "plugin": [
     "oh-my-opencode-slim@3.0.8"
-  ]
+  ],
+  "lsp": true
 }
