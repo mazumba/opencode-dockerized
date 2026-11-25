@@ -28,5 +28,5 @@ USER opencode
 # Uses the playwright build that @playwright/mcp depends on, so the browser always matches the
 # MCP server. Keep the version equal to browser.opencode.jsonc and browser.package.json (Renovate
 # updates all three together).
-RUN bun x --package @playwright/mcp@0.0.72 playwright install chromium
+RUN bun x --package @playwright/mcp@0.0.86 playwright install chromium
 USER root
