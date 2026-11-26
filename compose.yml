@@ -7,7 +7,7 @@ services:
       args:
         USER_UID: ${USER_UID:?USER_UID is not set. Run via make commands}
         USER_GID: ${USER_GID:?USER_GID is not set. Run via make commands}
-        OPENCODE_VERSION: ${OPENCODE_VERSION:-2.4.1}
+        OPENCODE_VERSION: ${OPENCODE_VERSION:-2.4.2}
         OH_MY_OPENCODE_SLIM_VERSION: ${OH_MY_OPENCODE_SLIM_VERSION:-3.0.8}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
